@@ -1,6 +1,6 @@
 lib/
 bin/
-pyenv.cfg
+pyvenv.cfg
 .env
 stderr.log
 stdout.log

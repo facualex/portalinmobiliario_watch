@@ -117,13 +117,13 @@ El script requiere una URL especial que contenga las coordenadas del polígono g
     ```
 7. Ponle un nombre a la propiedad agregando la variable `NOMBRE_PROPIEDAD` a tu  `.env`. Con este nombre recibirás las notificaciones en Telegram:
 
-  ```env
+```env
     # .env
     BOT_TOKEN="[TU_BOT_TOKEN]"
     CHAT_ID="[TU_CHAT_ID]"
     URL_A_MONITOREAR="[URL_COPIADA_DEL_NAVEGADOR]"
     NOMBRE_PROPIEDAD="[NOMBRE_IDENTIFICADOR]"
-    ```
+```
 
 ### Paso 7: Configurar el Archivo `.env` con BOT Telegram
 
