@@ -27,8 +27,8 @@ Primero, obtenga los archivos del proyecto en su máquina local.
 
 ```bash
 # Si usa git
-git clone <url-del-repositorio>
-cd <nombre-del-repositorio>
+git clone https://github.com/facualex/portalinmobiliario_watch
+cd portalinmobiliario_watch
 ```
 
 ### Paso 2: Crear y Activar un Entorno Virtual
