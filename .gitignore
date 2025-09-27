@@ -1,0 +1,7 @@
+lib/
+bin/
+pyenv.cfg
+.env
+stderr.log
+stdout.log
+ultimo_recuento.txt
