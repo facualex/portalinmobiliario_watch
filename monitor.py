@@ -1,4 +1,7 @@
+# -*- coding: utf-8 -*-
+
 import os
+from datetime import datetime
 
 # Requests para Telegram (es más ligero que usar Selenium para esto)
 import requests
@@ -22,11 +25,18 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 URL_A_MONITOREAR = os.getenv("URL_A_MONITOREAR")
 NOMBRE_PROPIEDAD = os.getenv("NOMBRE_PROPIEDAD")
 
-
 # --- CONSTANTES DEL SCRIPT ---
 NOMBRE_ARCHIVO_ESTADO = "ultimo_recuento.txt"
-# Selector CSS del elemento a esperar y extraer
+# Selector CSS para todos los marcadores de precio/unidades
 SELECTOR_UNIDADES = "span.ui-search-map-marker--price__label"
+
+
+def log_message(message):
+    """
+    Imprime un mensaje en la consola con un timestamp.
+    """
+    timestamp = datetime.now().strftime("[%d-%m-%Y %H:%M:%S]")
+    print(f"{timestamp} {message}")
 
 
 def enviar_notificacion_telegram(mensaje):
@@ -36,13 +46,13 @@ def enviar_notificacion_telegram(mensaje):
     try:
         response = requests.post(url_telegram_api, data=payload)
         if response.status_code == 200:
-            print("Notificación enviada exitosamente.")
+            log_message("Notificación enviada exitosamente.")
         else:
-            print(
+            log_message(
                 f"Error al enviar notificación: {response.status_code} - {response.text}"
             )
     except requests.exceptions.RequestException as e:
-        print(f"Error de conexión al enviar notificación: {e}")
+        log_message(f"Error de conexión al enviar notificación: {e}")
 
 
 def obtener_recuento_anterior():
@@ -53,7 +63,7 @@ def obtener_recuento_anterior():
         with open(NOMBRE_ARCHIVO_ESTADO, "r") as f:
             return f.read().strip() or None
     except IOError as e:
-        print(f"Error al leer el archivo de estado: {e}")
+        log_message(f"Error al leer el archivo de estado: {e}")
         return None
 
 
@@ -62,17 +72,18 @@ def guardar_recuento_actual(recuento):
     try:
         with open(NOMBRE_ARCHIVO_ESTADO, "w") as f:
             f.write(str(recuento))
-        print(f"Recuento actualizado guardado: {recuento}")
+        log_message(f"Recuento actualizado guardado: {recuento}")
     except IOError as e:
-        print(f"Error al guardar el nuevo recuento: {e}")
+        log_message(f"Error al guardar el nuevo recuento: {e}")
 
 
 def scrapear_unidades_disponibles():
     """
-    Utiliza Selenium para cargar la página, esperar el contenido dinámico y extraer el dato.
-    Devuelve el número como string, o None si ocurre un error.
+    Utiliza Selenium para cargar la página, esperar el contenido dinámico, encontrar
+    TODOS los marcadores de unidades y sumarlos.
+    Devuelve el número total de unidades como un entero (int), o None si ocurre un error.
     """
-    print("Configurando el navegador Selenium en modo headless...")
+    log_message("Configurando el navegador Selenium en modo headless...")
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
@@ -86,43 +97,79 @@ def scrapear_unidades_disponibles():
         service = ChromeService(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
 
-        print(f"Accediendo a la URL: {URL_A_MONITOREAR}")
+        log_message(f"Accediendo a la URL...")
         driver.get(URL_A_MONITOREAR)
 
-        print(
-            f"Esperando un máximo de 20 segundos a que aparezca el elemento '{SELECTOR_UNIDADES}'..."
+        log_message(
+            f"Esperando un máximo de 20 segundos a que aparezcan los elementos '{SELECTOR_UNIDADES}'..."
         )
-        # Estrategia de espera explícita: la mejor práctica
+        # Estrategia de espera explícita: esperar a que AL MENOS un elemento aparezca.
         wait = WebDriverWait(driver, 20)
-        span_unidades = wait.until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, SELECTOR_UNIDADES))
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, SELECTOR_UNIDADES)))
+
+        # Una vez que sabemos que hay al menos uno, buscamos TODOS los elementos que coincidan.
+        span_elements = driver.find_elements(By.CSS_SELECTOR, SELECTOR_UNIDADES)
+
+        if not span_elements:
+            log_message(
+                "Error: No se encontraron elementos, aunque la espera fue exitosa."
+            )
+            return None
+
+        total_unidades = 0
+        log_message(
+            f"Se encontraron {len(span_elements)} elementos de marcador. Procesando cada uno..."
         )
 
-        recuento = span_unidades.text.strip()
-        print(f"Recuento de unidades encontrado en la página: {recuento}")
-        return recuento
+        for span in span_elements:
+            texto = (
+                span.text.strip().lower()
+            )  # Convertir a minúsculas para una comparación robusta
+
+            # Lógica para sumar unidades
+            if "unidades" in texto:
+                # Es un grupo de unidades, ej: "3 unidades"
+                try:
+                    numero_str = texto.split()[0]
+                    total_unidades += int(numero_str)
+                    log_message(f"  -> '{texto}' -> Sumando {numero_str} unidades.")
+                except (ValueError, IndexError):
+                    log_message(
+                        f"  -> ADVERTENCIA: No se pudo extraer el número de '{texto}'. Contando como 1."
+                    )
+                    total_unidades += 1
+            else:
+                # Es una unidad individual (con precio), cuenta como 1.
+                total_unidades += 1
+                log_message(f"  -> '{texto}' -> Contando como 1 unidad.")
+
+        log_message(f"Recuento total de unidades calculado: {total_unidades}")
+        return total_unidades
 
     except TimeoutException:
-        print(
-            f"Error: El elemento '{SELECTOR_UNIDADES}' no apareció en 20 segundos. La estructura de la página puede haber cambiado o la carga fue muy lenta."
+        log_message(
+            f"Error: Ningún elemento '{SELECTOR_UNIDADES}' apareció en 20 segundos. Puede que hoy no haya unidades o la página cambió."
         )
-        return None
+        # Si no aparece ningún marcador, significa que hay 0 unidades.
+        return 0
     except Exception as e:
-        print(f"Ocurrió un error inesperado durante el scraping con Selenium: {e}")
+        log_message(
+            f"Ocurrió un error inesperado durante el scraping con Selenium: {e}"
+        )
         return None
     finally:
         if driver:
-            print("Cerrando el navegador Selenium.")
+            log_message("Cerrando el navegador Selenium.")
             driver.quit()
 
 
 def main():
     """Función principal que orquesta todo el proceso."""
-    print("--- Iniciando servicio de monitoreo ---")
+    log_message("--- Iniciando servicio de monitoreo ---")
 
     if not BOT_TOKEN or not CHAT_ID or not URL_A_MONITOREAR:
-        print(
-            "ERROR CRÍTICO: Las variables TELEGRAN_BOT_TOKEN, TELEGRAM_CHAT_ID y/o URL_A_MONITOREAR no están definidas. Revisa tu archivo .env."
+        log_message(
+            "ERROR CRÍTICO: Las variables TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID y/o URL_A_MONITOREAR no están definidas. Revisa tu archivo .env."
         )
         return
 
@@ -134,28 +181,31 @@ def main():
         enviar_notificacion_telegram(mensaje_error)
         return
 
+    # Convertimos recuento_actual a string para una comparación y guardado consistentes
+    recuento_actual_str = str(recuento_actual)
+
     if recuento_anterior is None:
-        print("Primera ejecución. Enviando notificación de bienvenida...")
+        log_message("Primera ejecución. Enviando notificación de bienvenida...")
         mensaje = (
             f"✅ **Servicio de Monitoreo Activado** ✅\n\n"
             f"Se ha iniciado el seguimiento para {NOMBRE_PROPIEDAD}\n\n"
-            f"Actualmente hay <b>{recuento_actual}</b> disponibles.\n"
+            f"Actualmente hay <b>{recuento_actual_str}</b> disponibles.\n"
             f"Se te notificará sobre cualquier cambio futuro."
         )
         enviar_notificacion_telegram(mensaje)
-    elif recuento_anterior != recuento_actual:
-        print("¡Cambio detectado! Enviando notificación...")
+    elif recuento_anterior != recuento_actual_str:
+        log_message("¡Cambio detectado! Enviando notificación...")
         mensaje = (
             f"🔔 **¡Cambio en {NOMBRE_PROPIEDAD}!** 🔔\n\n"
-            f"Unidades disponibles cambiaron de <b>{recuento_anterior}</b> a <b>{recuento_actual}</b>.\n\n"
+            f"Unidades disponibles cambiaron de <b>{recuento_anterior}</b> a <b>{recuento_actual_str}</b>.\n\n"
             f"Revisa ahora: {URL_A_MONITOREAR}"
         )
         enviar_notificacion_telegram(mensaje)
     else:
-        print("Sin cambios detectados. No se enviará notificación.")
+        log_message("Sin cambios detectados. No se enviará notificación.")
 
-    guardar_recuento_actual(recuento_actual)
-    print("--- Servicio de monitoreo finalizado ---")
+    guardar_recuento_actual(recuento_actual_str)
+    log_message("--- Servicio de monitoreo finalizado ---")
 
 
 if __name__ == "__main__":
