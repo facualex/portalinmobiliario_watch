@@ -211,9 +211,9 @@ Para que el script se convierta en un "servicio", debe ejecutarse automáticamen
         </dict>
 
         <key>StandardOutPath</key>
-        <string>/ruta/completa/a/tu/proyecto/stdout.log</string>
+        <string>/ruta/completa/a/tu/proyecto/launchd/stdout.log</string>
         <key>StandardErrorPath</key>
-        <string>/ruta/completa/a/tu/proyecto/stderr.log</string>
+        <string>/ruta/completa/a/tu/proyecto/launchd/stderr.log</string>
     </dict>
     </plist>
     ```
