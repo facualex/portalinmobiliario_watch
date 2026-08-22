@@ -127,16 +127,7 @@ Para que el script se convierta en un "servicio", debe ejecutarse automáticamen
 
 `launchd` es el sistema moderno y robusto de Apple para gestionar tareas programadas. A diferencia de `cron`, cuando usa `StartCalendarInterval` (como en este proyecto), `launchd` recuerda la última vez que corrió la tarea: si el Mac estaba dormido o apagado a la hora programada, en cuanto el equipo vuelve a estar disponible, `launchd` detecta que se perdió una ejecución y la corre en ese momento. Por eso es la opción recomendada para un monitoreo diario confiable en una laptop que no siempre está encendida o despierta a la hora exacta.
 
-**1. Crear Directorio para Logs:**
-`launchd` necesita un lugar donde escribir los archivos de salida y error.
-
-```bash
-# Desde la raíz de tu proyecto
-mkdir launchd
-chmod 755 launchd
-```
-
-**2. Crear el Archivo de Servicio (`.plist`):**
+**1. Crear el Archivo de Servicio (`.plist`):**
 Crea un archivo llamado `com.tunombre.mmscrapewatcher.plist` (cambia "tunombre") y pega el siguiente contenido. Asegúrate de actualizar las rutas.
 
 ```xml
@@ -160,15 +151,12 @@ Crea un archivo llamado `com.tunombre.mmscrapewatcher.plist` (cambia "tunombre")
         <key>Minute</key>
         <integer>0</integer>
     </dict>
-    <key>StandardOutPath</key>
-    <string>/ruta/completa/a/tu/proyecto/launchd/stdout.log</string>
-    <key>StandardErrorPath</key>
-    <string>/ruta/completa/a/tu/proyecto/launchd/stderr.log</string>
 </dict>
 </plist>
 ```
+No es necesario configurar `StandardOutPath`/`StandardErrorPath`: el propio script registra cada ejecución en su carpeta `logs/` (ver [Registro de Ejecuciones (Logs)](#registro-de-ejecuciones-logs)).
 
-**3. Mover y Cargar el Servicio:**
+**2. Mover y Cargar el Servicio:**
 ```bash
 # Mover el archivo
 mv com.tunombre.mmscrapewatcher.plist ~/Library/LaunchAgents/
@@ -210,19 +198,33 @@ Si prefieres no usar la línea de comandos, abre **Programador de Tareas** (busc
 -   En **Opciones avanzadas** de la acción, asegúrate de que **"Iniciar en" (Start in)** apunte a la carpeta del proyecto — esto reemplaza al `cd /d` del `.bat` si prefieres invocar `python.exe` directamente en vez del script `.bat`.
 -   En la pestaña **Condiciones**, si tu equipo suele estar en suspensión, habilita **"Reactivar el equipo para ejecutar esta tarea"**.
 
+## Registro de Ejecuciones (Logs)
+
+El script gestiona sus propios logs, independientemente del sistema operativo o del programador de tareas usado (`cron`, `launchd`, Task Scheduler).
+
+-   Cada ejecución crea un archivo dentro de `logs/`, nombrado con el timestamp de inicio: `logs/AAAA-MM-DD_HHMMSS.log`.
+-   Cada línea del archivo también incluye su propio timestamp interno.
+-   El mismo contenido se imprime en consola (útil para la ejecución manual de prueba).
+-   Solo se conservan los **10 logs más recientes**; al iniciar una nueva ejecución se eliminan automáticamente los más antiguos.
+
+Esto reemplaza cualquier necesidad de redirigir `stdout`/`stderr` a mano (por eso el `.plist` de `launchd` ya no define `StandardOutPath`/`StandardErrorPath`).
+
 ## Estructura del Proyecto
 
 ```
 .
 ├── .env                  # Archivo de configuración (NO subir a git)
 ├── .env.example          # Plantilla de configuración (sí se sube a git)
+├── estado.py             # Persistencia del último recuento conocido
 ├── get_chat_id.py        # Script de utilidad para obtener el Chat ID
 ├── img/                  # Carpeta con imágenes para la documentación
 │   ├── 1.png
 │   └── 2.png
-├── launchd/              # Carpeta para los logs de la automatización en macOS
-├── monitor.py            # Script principal de scraping y notificación
+├── logger_config.py      # Configuración reutilizable de logging (consola + archivo por ejecución)
+├── logs/                 # Logs de ejecución, últimos 10 (se genera solo)
+├── monitor.py            # Script principal de scraping y orquestación
 ├── requirements.txt      # Lista de dependencias de Python
+├── telegram_notifier.py  # Envío de notificaciones vía bot de Telegram
 ├── ultimo_recuento.txt   # Estado local con el último recuento (se genera solo)
 └── README.md             # Esta documentación
 ```
