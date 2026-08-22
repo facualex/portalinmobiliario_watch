@@ -28,12 +28,14 @@ La forma más simple de correr el servicio: no necesitas instalar Python, Seleni
     cd portalinmobiliario_watch
     cp .env.example .env
     ```
-2.  Completa `.env` con tus credenciales: para el bot de Telegram, el Chat ID y la URL a monitorear, sigue el **Paso 4** de la sección "Instalación Manual" más abajo — esa parte es igual la uses con Docker o sin él. Opcionalmente, ajusta `INTERVALO_HORAS` (por defecto 24).
+2.  Completa `.env` con tus credenciales: para el bot de Telegram, el Chat ID y la URL a monitorear, sigue el **Paso 4** de la sección "Instalación Manual" más abajo — esa parte es igual la uses con Docker o sin él. Además, decide cómo quieres programar las ejecuciones:
+    -   **Por intervalo** (default): ajusta `INTERVALO_HORAS` (por defecto 24) — corre apenas arranca el contenedor y luego cada N horas.
+    -   **A una hora fija todos los días** (más parecido a `cron`): define `HORA_EJECUCION` (formato `HH:MM`, ej. `09:00`) y `TZ` con tu zona horaria IANA (ej. `America/Santiago`). Si defines `HORA_EJECUCION`, `INTERVALO_HORAS` se ignora. Sin `HORA_EJECUCION`, `TZ` solo afecta los timestamps de los logs.
 3.  Construye y levanta el servicio en segundo plano:
     ```bash
     docker compose up -d --build
     ```
-    El contenedor queda corriendo de forma persistente (`restart: unless-stopped`), ejecutando el monitoreo cada `INTERVALO_HORAS`.
+    El contenedor queda corriendo de forma persistente (`restart: unless-stopped`), ejecutando el monitoreo según lo que hayas configurado en el paso anterior.
 4.  Revisa los logs en cualquier momento:
     ```bash
     docker compose logs -f
