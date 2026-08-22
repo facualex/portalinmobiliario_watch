@@ -6,3 +6,5 @@ logs/
 ultimo_recuento.txt
 __pycache__/
 *.pyc
+.venv/
+venv/

@@ -12,7 +12,7 @@ from telegram_notifier import enviar_notificacion_telegram
 
 # Selenium imports
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -130,8 +130,16 @@ def scrapear_unidades_disponibles():
                 f"ningún elemento '{SELECTOR_UNIDADES}' apareció en 20 segundos "
                 "(bloqueo, cambio de la página o problema de red)"
             )
+        except (WebDriverException, RuntimeError, OSError) as e:
+            # Fallos transitorios del navegador, de red o de descarga del driver:
+            # tiene sentido reintentar, a diferencia de un bug de programación.
+            motivo = f"fallo transitorio del navegador o de red ({e})"
         except Exception as e:
-            motivo = f"error inesperado durante el scraping: {e}"
+            logging.error(
+                f"Error inesperado y no transitorio durante el scraping, no se "
+                f"reintenta (probable bug o configuración incorrecta): {e}"
+            )
+            return None
 
         if intento == MAX_INTENTOS_SCRAPING:
             logging.error(
@@ -178,7 +186,7 @@ def main():
             f"Actualmente hay <b>{recuento_actual_str}</b> disponibles.\n"
             f"Se te notificará sobre cualquier cambio futuro."
         )
-        enviar_notificacion_telegram(BOT_TOKEN, CHAT_ID, mensaje)
+        notificacion_enviada = enviar_notificacion_telegram(BOT_TOKEN, CHAT_ID, mensaje)
     elif recuento_anterior != recuento_actual_str:
         logging.info("¡Cambio detectado! Enviando notificación...")
         mensaje = (
@@ -186,11 +194,19 @@ def main():
             f"Unidades disponibles cambiaron de <b>{recuento_anterior}</b> a <b>{recuento_actual_str}</b>.\n\n"
             f"Revisa ahora: {URL_A_MONITOREAR}"
         )
-        enviar_notificacion_telegram(BOT_TOKEN, CHAT_ID, mensaje)
+        notificacion_enviada = enviar_notificacion_telegram(BOT_TOKEN, CHAT_ID, mensaje)
     else:
         logging.info("Sin cambios detectados. No se enviará notificación.")
+        notificacion_enviada = True  # No había nada que notificar.
 
-    guardar_recuento_actual(NOMBRE_ARCHIVO_ESTADO, recuento_actual_str)
+    if notificacion_enviada:
+        guardar_recuento_actual(NOMBRE_ARCHIVO_ESTADO, recuento_actual_str)
+    else:
+        logging.warning(
+            "No se guarda el nuevo recuento porque la notificación no pudo enviarse; "
+            "se reintentará notificar en la próxima ejecución."
+        )
+
     logging.info("--- Servicio de monitoreo finalizado ---")
 
 

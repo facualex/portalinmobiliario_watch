@@ -12,12 +12,11 @@ def configurar_logging(directorio_logs, max_logs=10):
     """
     Configura logging a consola y a un archivo propio de esta ejecución dentro de
     `directorio_logs`, con el timestamp de inicio en el nombre del archivo.
-    Antes de crear el nuevo archivo, conserva solo los `max_logs` más recientes,
-    eliminando los sobrantes más antiguos.
+    Luego de configurar el logging, conserva solo los `max_logs` más recientes
+    (sin contar el archivo recién creado), eliminando los sobrantes más antiguos.
     Devuelve la ruta del archivo de log creado.
     """
     os.makedirs(directorio_logs, exist_ok=True)
-    _limpiar_logs_antiguos(directorio_logs, max_logs)
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     archivo_log = os.path.join(directorio_logs, f"{timestamp}.log")
@@ -31,20 +30,30 @@ def configurar_logging(directorio_logs, max_logs=10):
             logging.StreamHandler(),
         ],
     )
+
+    # Se limpia después de configurar el logging (excluyendo el archivo recién
+    # creado) para que cualquier falla al eliminar quede registrada, en vez de
+    # ignorarse en silencio.
+    _limpiar_logs_antiguos(directorio_logs, max_logs, excluir=archivo_log)
     return archivo_log
 
 
-def _limpiar_logs_antiguos(directorio_logs, max_logs):
+def _limpiar_logs_antiguos(directorio_logs, max_logs, excluir=None):
     """
-    Elimina los archivos de log más antiguos en `directorio_logs`, dejando espacio
-    para que, tras crearse el log de la ejecución actual, queden como máximo `max_logs`.
+    Elimina los archivos de log más antiguos en `directorio_logs` (sin contar
+    `excluir`), dejando como máximo `max_logs` en total.
     """
     archivos = sorted(
-        glob.glob(os.path.join(directorio_logs, "*.log")), key=os.path.getmtime
+        (
+            archivo
+            for archivo in glob.glob(os.path.join(directorio_logs, "*.log"))
+            if archivo != excluir
+        ),
+        key=os.path.getmtime,
     )
     exceso = len(archivos) - (max_logs - 1)
     for archivo in archivos[: max(exceso, 0)]:
         try:
             os.remove(archivo)
-        except OSError:
-            pass
+        except OSError as e:
+            logging.warning(f"No se pudo eliminar el log antiguo '{archivo}': {e}")
