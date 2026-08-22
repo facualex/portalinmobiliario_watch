@@ -12,9 +12,47 @@ Este proyecto es un servicio de monitoreo automatizado que realiza web scraping 
 
 ---
 
-## Guía de Instalación y Configuración
+## Instalación con Docker (recomendado)
 
-Siga estos pasos en orden para configurar y poner en marcha el servicio.
+La forma más simple de correr el servicio: no necesitas instalar Python, Selenium, Chrome, ni configurar `cron`/`launchd`/Task Scheduler. Todo corre dentro de un contenedor con Chromium y su driver ya instalados y pareados (misma versión, sin descargas en runtime), más un programador interno (`scheduler.py`) que se encarga de las ejecuciones periódicas.
+
+### Requisitos
+
+-   [Docker](https://docs.docker.com/get-docker/) con Docker Compose.
+
+### Pasos
+
+1.  Clona el proyecto y crea tu `.env`:
+    ```bash
+    git clone https://github.com/facualex/portalinmobiliario_watch
+    cd portalinmobiliario_watch
+    cp .env.example .env
+    ```
+2.  Completa `.env` con tus credenciales: para el bot de Telegram, el Chat ID y la URL a monitorear, sigue el **Paso 4** de la sección "Instalación Manual" más abajo — esa parte es igual la uses con Docker o sin él. Opcionalmente, ajusta `INTERVALO_HORAS` (por defecto 24).
+3.  Construye y levanta el servicio en segundo plano:
+    ```bash
+    docker compose up -d --build
+    ```
+    El contenedor queda corriendo de forma persistente (`restart: unless-stopped`), ejecutando el monitoreo cada `INTERVALO_HORAS`.
+4.  Revisa los logs en cualquier momento:
+    ```bash
+    docker compose logs -f
+    ```
+    (también quedan en `logs/` en tu máquina, montado como volumen).
+5.  Para detenerlo:
+    ```bash
+    docker compose down
+    ```
+
+El estado (`data/ultimo_recuento.txt`) y los logs (`logs/`) se guardan en tu máquina vía volúmenes, así que persisten aunque reconstruyas o reinicies el contenedor.
+
+> **¿Ya tienes esto funcionando con Docker?** Puedes saltarte por completo la sección "Automatización (Ejecución Diaria)" más abajo — es solo para quienes instalan sin Docker.
+
+---
+
+## Instalación Manual (sin Docker)
+
+Si prefieres no usar Docker, sigue estos pasos para instalar Python, Selenium y configurar la automatización según tu sistema operativo.
 
 ### Requisitos Previos
 
@@ -110,6 +148,8 @@ La primera vez que lo ejecutes, deberías recibir una notificación de bienvenid
 
 ## Automatización (Ejecución Diaria)
 
+> Esta sección aplica solo a la instalación manual (sin Docker). Si usas Docker, el programador interno ya se encarga de esto — no necesitas nada de lo siguiente.
+
 Para que el script se convierta en un "servicio", debe ejecutarse automáticamente. El método depende del sistema operativo:
 
 ### Linux / macOS (básico): `cron`
@@ -200,7 +240,7 @@ Si prefieres no usar la línea de comandos, abre **Programador de Tareas** (busc
 
 ## Registro de Ejecuciones (Logs)
 
-El script gestiona sus propios logs, independientemente del sistema operativo o del programador de tareas usado (`cron`, `launchd`, Task Scheduler).
+El script gestiona sus propios logs, independientemente de si corre con Docker, con el programador interno, o vía `cron`/`launchd`/Task Scheduler.
 
 -   Cada ejecución crea un archivo dentro de `logs/`, nombrado con el timestamp de inicio: `logs/AAAA-MM-DD_HHMMSS.log`.
 -   Cada línea del archivo también incluye su propio timestamp interno.
@@ -215,6 +255,10 @@ Esto reemplaza cualquier necesidad de redirigir `stdout`/`stderr` a mano (por es
 .
 ├── .env                  # Archivo de configuración (NO subir a git)
 ├── .env.example          # Plantilla de configuración (sí se sube a git)
+├── .dockerignore         # Excluye archivos innecesarios del build de la imagen
+├── data/                 # Estado persistente (ultimo_recuento.txt), montado como volumen en Docker
+├── docker-compose.yml    # Levanta el servicio en un contenedor con Chromium incluido
+├── Dockerfile            # Imagen: Python + Chromium + chromedriver pareados
 ├── estado.py             # Persistencia del último recuento conocido
 ├── get_chat_id.py        # Script de utilidad para obtener el Chat ID
 ├── img/                  # Carpeta con imágenes para la documentación
@@ -224,7 +268,7 @@ Esto reemplaza cualquier necesidad de redirigir `stdout`/`stderr` a mano (por es
 ├── logs/                 # Logs de ejecución, últimos 10 (se genera solo)
 ├── monitor.py            # Script principal de scraping y orquestación
 ├── requirements.txt      # Lista de dependencias de Python
+├── scheduler.py          # Programador interno: corre monitor.main() en bucle
 ├── telegram_notifier.py  # Envío de notificaciones vía bot de Telegram
-├── ultimo_recuento.txt   # Estado local con el último recuento (se genera solo)
 └── README.md             # Esta documentación
 ```
