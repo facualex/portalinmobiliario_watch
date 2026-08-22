@@ -30,7 +30,7 @@ NOMBRE_PROPIEDAD = os.getenv("NOMBRE_PROPIEDAD")
 
 # --- CONSTANTES DEL SCRIPT ---
 DIRECTORIO_SCRIPT = os.path.dirname(os.path.abspath(__file__))
-NOMBRE_ARCHIVO_ESTADO = os.path.join(DIRECTORIO_SCRIPT, "ultimo_recuento.txt")
+NOMBRE_ARCHIVO_ESTADO = os.path.join(DIRECTORIO_SCRIPT, "data", "ultimo_recuento.txt")
 # Selector CSS para todos los marcadores de precio/unidades
 SELECTOR_UNIDADES = "span.ui-search-map-marker--price__label"
 # Reintentos ante fallos transitorios de scraping (timeouts, bloqueos momentáneos, etc.)
@@ -40,6 +40,11 @@ ESPERA_INICIAL_SEGUNDOS = 5  # backoff exponencial: 5s, 10s, 20s...
 # --- CONSTANTES DE LOGGING ---
 DIRECTORIO_LOGS = os.path.join(DIRECTORIO_SCRIPT, "logs")
 MAX_LOGS_A_CONSERVAR = 10
+
+# Si se definen, se usa un Chrome y un chromedriver ya instalados en el sistema
+# (como en la imagen Docker) en vez de que webdriver-manager descargue uno.
+CHROME_BINARY_PATH = os.getenv("CHROME_BINARY_PATH")
+CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH")
 
 
 def _intentar_scraping_unidades():
@@ -57,10 +62,15 @@ def _intentar_scraping_unidades():
     options.add_argument(
         "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     )
+    if CHROME_BINARY_PATH:
+        options.binary_location = CHROME_BINARY_PATH
 
     driver = None
     try:
-        service = ChromeService(ChromeDriverManager().install())
+        if CHROMEDRIVER_PATH:
+            service = ChromeService(CHROMEDRIVER_PATH)
+        else:
+            service = ChromeService(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
 
         logging.info("Accediendo a la URL...")

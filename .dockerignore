@@ -1,0 +1,13 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.env
+logs/
+data/
+ultimo_recuento.txt
+img/
+launchd/
+README.md

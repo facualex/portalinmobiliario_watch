@@ -18,8 +18,9 @@ def obtener_recuento_anterior(nombre_archivo_estado):
 
 
 def guardar_recuento_actual(nombre_archivo_estado, recuento):
-    """Guarda `recuento` en `nombre_archivo_estado`."""
+    """Guarda `recuento` en `nombre_archivo_estado`, creando su carpeta si falta."""
     try:
+        os.makedirs(os.path.dirname(nombre_archivo_estado), exist_ok=True)
         with open(nombre_archivo_estado, "w") as f:
             f.write(str(recuento))
         logging.info(f"Recuento actualizado guardado: {recuento}")

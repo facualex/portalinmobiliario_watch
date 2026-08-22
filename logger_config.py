@@ -29,6 +29,9 @@ def configurar_logging(directorio_logs, max_logs=10):
             logging.FileHandler(archivo_log, encoding="utf-8"),
             logging.StreamHandler(),
         ],
+        # Permite reconfigurar en cada llamada (ej. un proceso de larga duración
+        # que corre main() en un bucle, generando un log nuevo por iteración).
+        force=True,
     )
 
     # Se limpia después de configurar el logging (excluyendo el archivo recién
