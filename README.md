@@ -110,9 +110,9 @@ La primera vez que lo ejecutes, deberías recibir una notificación de bienvenid
 
 ## Automatización (Ejecución Diaria)
 
-Para que el script se convierta en un "servicio", debe ejecutarse automáticamente.
+Para que el script se convierta en un "servicio", debe ejecutarse automáticamente. El método depende del sistema operativo:
 
-### Método 1: `cron` (Linux / macOS - Básico)
+### Linux / macOS (básico): `cron`
 
 1.  Abre tu editor de `crontab`: `crontab -e`
 2.  Añade la siguiente línea para ejecutar el script todos los días a las 9:00 AM:
@@ -123,7 +123,7 @@ Para que el script se convierta en un "servicio", debe ejecutarse automáticamen
 
 > **Limitación Importante de `cron` en macOS:** Si tu Mac está en modo de reposo (tapa cerrada), **el `cron` job no se ejecutará**. Para macOS, el método `launchd` es la solución recomendada.
 
-### Método 2: `launchd` (macOS - Recomendado)
+### macOS (recomendado): `launchd`
 
 `launchd` es el sistema moderno y robusto de Apple para gestionar tareas programadas.
 
@@ -177,6 +177,38 @@ mv com.tunombre.mmscrapewatcher.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.tunombre.mmscrapewatcher.plist
 ```
 Tu servicio ahora está correctamente configurado. Puedes forzar una ejecución de prueba con `launchctl start com.tunombre.mmscrapewatcher`.
+
+### Windows: Programador de Tareas
+
+Windows no tiene `cron`; su equivalente nativo es el **Programador de Tareas** (Task Scheduler). Como `python-dotenv` busca el archivo `.env` a partir del directorio de trabajo actual, es fundamental que la tarea se ejecute posicionada en la carpeta del proyecto, no solo que se invoque el script.
+
+**1. Crear un archivo `.bat` que fije el directorio de trabajo:**
+
+En la raíz del proyecto, crea `run_monitor.bat`:
+```bat
+@echo off
+cd /d "C:\ruta\completa\a\tu\proyecto"
+"C:\ruta\completa\a\tu\proyecto\venv\Scripts\python.exe" monitor.py
+```
+-   **Importante:** Reemplaza `C:\ruta\completa\a\tu\proyecto` con la ruta absoluta real de tu proyecto en ambas líneas.
+
+**2. Programar la tarea con `schtasks` (línea de comandos):**
+
+Abre `cmd.exe` o PowerShell como el usuario que ejecutará la tarea y corre:
+```cmd
+schtasks /create /tn "PortalInmobiliarioWatch" /tr "C:\ruta\completa\a\tu\proyecto\run_monitor.bat" /sc daily /st 09:00
+```
+-   `/sc daily /st 09:00` programa la ejecución diaria a las 9:00 AM. Ajusta el horario a tu preferencia.
+-   Puedes forzar una ejecución de prueba con: `schtasks /run /tn "PortalInmobiliarioWatch"`
+-   Para eliminar la tarea: `schtasks /delete /tn "PortalInmobiliarioWatch" /f`
+
+**3. Alternativa por interfaz gráfica:**
+
+Si prefieres no usar la línea de comandos, abre **Programador de Tareas** (busca "Task Scheduler" en el menú de inicio) y crea una tarea básica:
+-   **Desencadenador:** Diario, a la hora que prefieras.
+-   **Acción:** "Iniciar un programa", apuntando a `run_monitor.bat`.
+-   En **Opciones avanzadas** de la acción, asegúrate de que **"Iniciar en" (Start in)** apunte a la carpeta del proyecto — esto reemplaza al `cd /d` del `.bat` si prefieres invocar `python.exe` directamente en vez del script `.bat`.
+-   En la pestaña **Condiciones**, si tu equipo suele estar en suspensión, habilita **"Reactivar el equipo para ejecutar esta tarea"**.
 
 ## Estructura del Proyecto
 
