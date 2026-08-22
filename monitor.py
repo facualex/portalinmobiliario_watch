@@ -26,7 +26,8 @@ URL_A_MONITOREAR = os.getenv("URL_A_MONITOREAR")
 NOMBRE_PROPIEDAD = os.getenv("NOMBRE_PROPIEDAD")
 
 # --- CONSTANTES DEL SCRIPT ---
-NOMBRE_ARCHIVO_ESTADO = "ultimo_recuento.txt"
+DIRECTORIO_SCRIPT = os.path.dirname(os.path.abspath(__file__))
+NOMBRE_ARCHIVO_ESTADO = os.path.join(DIRECTORIO_SCRIPT, "ultimo_recuento.txt")
 # Selector CSS para todos los marcadores de precio/unidades
 SELECTOR_UNIDADES = "span.ui-search-map-marker--price__label"
 
@@ -148,10 +149,11 @@ def scrapear_unidades_disponibles():
 
     except TimeoutException:
         log_message(
-            f"Error: Ningún elemento '{SELECTOR_UNIDADES}' apareció en 20 segundos. Puede que hoy no haya unidades o la página cambió."
+            f"Timeout: Ningún elemento '{SELECTOR_UNIDADES}' apareció en 20 segundos. "
+            "No se puede distinguir entre '0 unidades reales' y un fallo de scraping "
+            "(bloqueo, cambio de la página, problema de red), así que se trata como error."
         )
-        # Si no aparece ningún marcador, significa que hay 0 unidades.
-        return 0
+        return None
     except Exception as e:
         log_message(
             f"Ocurrió un error inesperado durante el scraping con Selenium: {e}"
@@ -177,7 +179,7 @@ def main():
     recuento_actual = scrapear_unidades_disponibles()
 
     if recuento_actual is None:
-        mensaje_error = "🚨 **ERROR DE SCRAPING** 🚨\nNo se pudo obtener el número de unidades de Portal Inmobiliario. Revisa el script o la página web."
+        mensaje_error = "🚨 <b>ERROR DE SCRAPING</b> 🚨\nNo se pudo obtener el número de unidades de Portal Inmobiliario. Revisa el script o la página web."
         enviar_notificacion_telegram(mensaje_error)
         return
 
@@ -187,7 +189,7 @@ def main():
     if recuento_anterior is None:
         log_message("Primera ejecución. Enviando notificación de bienvenida...")
         mensaje = (
-            f"✅ **Servicio de Monitoreo Activado** ✅\n\n"
+            f"✅ <b>Servicio de Monitoreo Activado</b> ✅\n\n"
             f"Se ha iniciado el seguimiento para {NOMBRE_PROPIEDAD}\n\n"
             f"Actualmente hay <b>{recuento_actual_str}</b> disponibles.\n"
             f"Se te notificará sobre cualquier cambio futuro."
@@ -196,7 +198,7 @@ def main():
     elif recuento_anterior != recuento_actual_str:
         log_message("¡Cambio detectado! Enviando notificación...")
         mensaje = (
-            f"🔔 **¡Cambio en {NOMBRE_PROPIEDAD}!** 🔔\n\n"
+            f"🔔 <b>¡Cambio en {NOMBRE_PROPIEDAD}!</b> 🔔\n\n"
             f"Unidades disponibles cambiaron de <b>{recuento_anterior}</b> a <b>{recuento_actual_str}</b>.\n\n"
             f"Revisa ahora: {URL_A_MONITOREAR}"
         )
