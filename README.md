@@ -40,7 +40,7 @@ Es una **práctica esencial** aislar las dependencias del proyecto para no afect
 python3 -m venv venv
 
 # Activar el entorno virtual
-source v-env/bin/activate
+source venv/bin/activate
 
 # (Cuando termines de trabajar, para desactivarlo, simplemente escribe: deactivate)
 ```
@@ -58,9 +58,9 @@ pip install -r requirements.txt
 Este archivo centralizará toda la configuración.
 
 #### 4.1. Crear el archivo `.env`
-En la raíz del proyecto, crea el archivo que contendrá tus configuraciones.
+En la raíz del proyecto encontrarás `.env.example`, una plantilla con todas las variables necesarias. Copiala como `.env`:
 ```bash
-touch .env
+cp .env.example .env
 ```
 
 #### 4.2. Configurar el Bot de Telegram
@@ -84,11 +84,10 @@ El script requiere una URL especial que contenga las coordenadas del polígono g
 5.  Una vez que dibujes el área, la página generará una nueva URL en tu navegador. **Copia esta URL completa**.
 
 #### 4.4. Completar el archivo `.env`
-Abre el archivo `.env` y pega toda la información que recopilaste. Piensa en un nombre corto para la propiedad (ej. "Edificio Manuel Montt") para la variable `NOMBRE_PROPIEDAD`.
+Abre el archivo `.env` (creado a partir de `.env.example`) y completa cada variable con la información que recopilaste. Piensa en un nombre corto para la propiedad (ej. "Edificio Manuel Montt") para la variable `NOMBRE_PROPIEDAD`.
 
 Tu archivo final debe verse así:
 ```env
-# .env - Archivo de Configuración
 TELEGRAM_BOT_TOKEN="[TU_BOT_TOKEN_AQUI]"
 TELEGRAM_CHAT_ID="[TU_CHAT_ID_AQUI]"
 URL_A_MONITOREAR="[URL_COPIADA_DEL_NAVEGADOR]"
@@ -184,6 +183,7 @@ Tu servicio ahora está correctamente configurado. Puedes forzar una ejecución 
 ```
 .
 ├── .env                  # Archivo de configuración (NO subir a git)
+├── .env.example          # Plantilla de configuración (sí se sube a git)
 ├── get_chat_id.py        # Script de utilidad para obtener el Chat ID
 ├── img/                  # Carpeta con imágenes para la documentación
 │   ├── 1.png
@@ -191,5 +191,6 @@ Tu servicio ahora está correctamente configurado. Puedes forzar una ejecución 
 ├── launchd/              # Carpeta para los logs de la automatización en macOS
 ├── monitor.py            # Script principal de scraping y notificación
 ├── requirements.txt      # Lista de dependencias de Python
+├── ultimo_recuento.txt   # Estado local con el último recuento (se genera solo)
 └── README.md             # Esta documentación
 ```
