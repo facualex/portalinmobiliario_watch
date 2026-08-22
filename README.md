@@ -121,11 +121,11 @@ Para que el script se convierta en un "servicio", debe ejecutarse automáticamen
     ```
     -   **Importante:** Reemplaza `/ruta/completa/a/tu/proyecto` con tu ruta absoluta. El `cd` es crucial para que el script encuentre el archivo `.env`.
 
-> **Limitación Importante de `cron` en macOS:** Si tu Mac está en modo de reposo (tapa cerrada), **el `cron` job no se ejecutará**. Para macOS, el método `launchd` es la solución recomendada.
+> **Limitación Importante de `cron` en macOS:** Si tu Mac está en modo de reposo (tapa cerrada) o apagado a la hora programada, **el `cron` job simplemente se salta esa ejecución** y no hay forma de recuperarla. Para macOS, el método `launchd` es la solución recomendada.
 
 ### macOS (recomendado): `launchd`
 
-`launchd` es el sistema moderno y robusto de Apple para gestionar tareas programadas.
+`launchd` es el sistema moderno y robusto de Apple para gestionar tareas programadas. A diferencia de `cron`, cuando usa `StartCalendarInterval` (como en este proyecto), `launchd` recuerda la última vez que corrió la tarea: si el Mac estaba dormido o apagado a la hora programada, en cuanto el equipo vuelve a estar disponible, `launchd` detecta que se perdió una ejecución y la corre en ese momento. Por eso es la opción recomendada para un monitoreo diario confiable en una laptop que no siempre está encendida o despierta a la hora exacta.
 
 **1. Crear Directorio para Logs:**
 `launchd` necesita un lugar donde escribir los archivos de salida y error.
