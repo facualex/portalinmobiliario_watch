@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import time
 from datetime import datetime
 
 # Requests para Telegram (es más ligero que usar Selenium para esto)
@@ -30,6 +31,9 @@ DIRECTORIO_SCRIPT = os.path.dirname(os.path.abspath(__file__))
 NOMBRE_ARCHIVO_ESTADO = os.path.join(DIRECTORIO_SCRIPT, "ultimo_recuento.txt")
 # Selector CSS para todos los marcadores de precio/unidades
 SELECTOR_UNIDADES = "span.ui-search-map-marker--price__label"
+# Reintentos ante fallos transitorios de scraping (timeouts, bloqueos momentáneos, etc.)
+MAX_INTENTOS_SCRAPING = 4
+ESPERA_INICIAL_SEGUNDOS = 5  # backoff exponencial: 5s, 10s, 20s...
 
 
 def log_message(message):
@@ -78,11 +82,12 @@ def guardar_recuento_actual(recuento):
         log_message(f"Error al guardar el nuevo recuento: {e}")
 
 
-def scrapear_unidades_disponibles():
+def _intentar_scraping_unidades():
     """
-    Utiliza Selenium para cargar la página, esperar el contenido dinámico, encontrar
-    TODOS los marcadores de unidades y sumarlos.
-    Devuelve el número total de unidades como un entero (int), o None si ocurre un error.
+    Un único intento de scraping: abre el navegador, espera el contenido dinámico,
+    encuentra TODOS los marcadores de unidades y los suma.
+    Devuelve el número total de unidades como int. Lanza una excepción si el intento falla
+    (timeout, elementos ausentes, error de Selenium, etc.); el llamante decide si reintentar.
     """
     log_message("Configurando el navegador Selenium en modo headless...")
     options = webdriver.ChromeOptions()
@@ -98,7 +103,7 @@ def scrapear_unidades_disponibles():
         service = ChromeService(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
 
-        log_message(f"Accediendo a la URL...")
+        log_message("Accediendo a la URL...")
         driver.get(URL_A_MONITOREAR)
 
         log_message(
@@ -112,10 +117,9 @@ def scrapear_unidades_disponibles():
         span_elements = driver.find_elements(By.CSS_SELECTOR, SELECTOR_UNIDADES)
 
         if not span_elements:
-            log_message(
-                "Error: No se encontraron elementos, aunque la espera fue exitosa."
+            raise RuntimeError(
+                "La espera fue exitosa pero no se encontraron elementos."
             )
-            return None
 
         total_unidades = 0
         log_message(
@@ -146,23 +150,42 @@ def scrapear_unidades_disponibles():
 
         log_message(f"Recuento total de unidades calculado: {total_unidades}")
         return total_unidades
-
-    except TimeoutException:
-        log_message(
-            f"Timeout: Ningún elemento '{SELECTOR_UNIDADES}' apareció en 20 segundos. "
-            "No se puede distinguir entre '0 unidades reales' y un fallo de scraping "
-            "(bloqueo, cambio de la página, problema de red), así que se trata como error."
-        )
-        return None
-    except Exception as e:
-        log_message(
-            f"Ocurrió un error inesperado durante el scraping con Selenium: {e}"
-        )
-        return None
     finally:
         if driver:
             log_message("Cerrando el navegador Selenium.")
             driver.quit()
+
+
+def scrapear_unidades_disponibles():
+    """
+    Ejecuta _intentar_scraping_unidades() con reintentos y backoff exponencial ante
+    fallos transitorios (timeouts, bloqueos momentáneos, problemas de red).
+    Devuelve el número total de unidades como int, o None si todos los intentos fallan.
+    """
+    for intento in range(1, MAX_INTENTOS_SCRAPING + 1):
+        try:
+            return _intentar_scraping_unidades()
+        except TimeoutException:
+            motivo = (
+                f"ningún elemento '{SELECTOR_UNIDADES}' apareció en 20 segundos "
+                "(bloqueo, cambio de la página o problema de red)"
+            )
+        except Exception as e:
+            motivo = f"error inesperado durante el scraping: {e}"
+
+        if intento == MAX_INTENTOS_SCRAPING:
+            log_message(
+                f"Intento {intento}/{MAX_INTENTOS_SCRAPING} falló ({motivo}). "
+                "Se alcanzó el máximo de reintentos, se trata como error de scraping."
+            )
+            return None
+
+        espera = ESPERA_INICIAL_SEGUNDOS * (2 ** (intento - 1))
+        log_message(
+            f"Intento {intento}/{MAX_INTENTOS_SCRAPING} falló ({motivo}). "
+            f"Reintentando en {espera} segundos..."
+        )
+        time.sleep(espera)
 
 
 def main():

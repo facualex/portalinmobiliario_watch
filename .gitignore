@@ -4,3 +4,5 @@ pyvenv.cfg
 .env
 launchd/
 ultimo_recuento.txt
+__pycache__/
+*.pyc
