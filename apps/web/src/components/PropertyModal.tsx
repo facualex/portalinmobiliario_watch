@@ -96,6 +96,8 @@ export function PropertyModal({ chats, propiedad, onClose, onSaved }: Props) {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [mostrarAyudaUrl, setMostrarAyudaUrl] = useState(false);
+
   const [probandoUrl, setProbandoUrl] = useState(false);
   const [resultadoPrueba, setResultadoPrueba] = useState<{
     ok: boolean;
@@ -294,8 +296,53 @@ export function PropertyModal({ chats, propiedad, onClose, onSaved }: Props) {
             />
             <span className="field-hint">
               Pega la URL del mapa de Portal Inmobiliario con el polígono
-              dibujado.
+              dibujado.{" "}
+              <button
+                type="button"
+                className="field-hint-link"
+                onClick={() => setMostrarAyudaUrl((v) => !v)}
+              >
+                ¿Cómo obtengo esta URL?
+              </button>
             </span>
+
+            {mostrarAyudaUrl && (
+              <div className="url-help">
+                <ol>
+                  <li>
+                    Abre{" "}
+                    <a
+                      href="https://www.portalinmobiliario.com/arriendo/departamento/_DisplayType_M"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      el mapa de Portal Inmobiliario
+                    </a>
+                    . Arriba puedes elegir entre <strong>Arriendo</strong> o{" "}
+                    <strong>Venta</strong> según lo que quieras vigilar (el
+                    link te lleva directo a Arriendo).
+                  </li>
+                  <li>
+                    Busca la comuna o sector donde está el edificio con el
+                    buscador que está arriba del mapa, o navega manualmente
+                    hasta encontrarlo.
+                  </li>
+                  <li>
+                    En la parte superior derecha del mapa, haz clic en la
+                    herramienta <strong>"Dibujar área"</strong>.
+                  </li>
+                  <li>
+                    Dibuja un polígono lo más ajustado posible alrededor del
+                    edificio (así el conteo no incluye otras propiedades cercanas).
+                  </li>
+                  <li>
+                    Al terminar de dibujar, la página genera una URL nueva en
+                    tu navegador: cópiala completa y pégala acá arriba.
+                  </li>
+                </ol>
+              </div>
+            )}
+
             <div className="prueba-url-row">
               <button
                 type="button"

@@ -82,8 +82,8 @@ El estado (`data/lindero.db`) y los logs (`logs/`) se guardan en tu máquina ví
 
 ### Obtener la URL del polígono de un edificio
 
-1. Visita la página de arriendos (vista mapa) de [Portal Inmobiliario](https://www.portalinmobiliario.com/arriendo/departamento/_DisplayType_M).
-2. Navega en el mapa hasta encontrar el edificio que deseas monitorear.
+1. Visita el [mapa de Portal Inmobiliario](https://www.portalinmobiliario.com/arriendo/departamento/_DisplayType_M). Arriba puedes elegir entre **Arriendo** o **Venta**, según lo que quieras vigilar (el link te lleva directo a Arriendo).
+2. Busca la comuna o sector donde está el edificio con el buscador que está arriba del mapa, o navega manualmente hasta encontrarlo.
 3. En la parte superior derecha del mapa, haz clic en la herramienta **`Dibujar área`**.
 
    ![Herramienta 'Dibujar área' en el mapa de Portal Inmobiliario](./img/1.png)

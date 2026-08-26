@@ -584,6 +584,30 @@ select {
   font-size: inherit;
 }
 
+.url-help {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.url-help ol {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.url-help li {
+  font-size: 12px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+.url-help a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .prueba-url-row {
   display: flex;
   align-items: center;
