@@ -28,44 +28,55 @@ Todo el estado vive en una base **SQLite** compartida (`data/lindero.db`), sin i
 
 ### Requisitos
 
-- [Docker](https://docs.docker.com/get-docker/) con Docker Compose.
+- [Docker Desktop](https://docs.docker.com/get-docker/) instalado **y abierto**. Docker Desktop tiene que quedar corriendo en segundo plano (vas a ver su ícono, una ballena, en la barra de tareas o menu bar); si está cerrado, los comandos de más abajo van a fallar con un error como "Cannot connect to the Docker daemon".
+- Una cuenta de Telegram, para crear el bot y recibir los avisos.
+- Saber abrir la terminal de tu sistema (en Mac: la aplicación "Terminal"; en Windows: "PowerShell" o "Símbolo del sistema"). No hace falta experiencia previa: cada comando que tienes que escribir está indicado abajo, tal cual.
 
 ### Pasos
 
-1. Clona el proyecto y crea tu `.env`:
+1. Abre una terminal y clona el proyecto:
    ```bash
    git clone https://github.com/facualex/portalinmobiliario_watch
    cd portalinmobiliario_watch
    cp .env.example .env
    ```
-2. Crea un bot de Telegram: en Telegram, busca a `@BotFather`, envía `/newbot` y sigue las instrucciones. Copia el **Token HTTP API** y pégalo en `.env` como `TELEGRAM_BOT_TOKEN`. Es el único secreto que necesitas configurar a mano; todo lo demás (qué propiedades vigilar, a qué chat notificar) se configura después, desde la interfaz web.
-3. Levanta los servicios:
+
+   > 💡 **Importante:** el `cd portalinmobiliario_watch` de arriba te deja parado dentro de la carpeta del proyecto, y **todos los comandos de esta guía asumen que estás ahí**. Si en algún momento cierras la terminal o abres una nueva, tienes que volver a entrar a esa carpeta antes de seguir. Un truco que funciona en Mac y Windows: escribe `cd ` (con un espacio al final, sin presionar Enter) y luego arrastra la carpeta `portalinmobiliario_watch` desde el explorador de archivos hacia la ventana de la terminal; la ruta se completa sola. Ahí sí, presiona Enter.
+
+2. Crea un bot de Telegram: en Telegram, busca a `@BotFather`, envíale `/newbot` y sigue sus instrucciones (te va a pedir un nombre y un usuario para tu bot). Al final te entrega un **Token HTTP API**, una cadena larga de letras y números: cópiala.
+
+   Ahora abre el archivo `.env` que se creó en el paso anterior (está dentro de la carpeta del proyecto) con un editor de texto simple, como el Bloc de notas en Windows o TextEdit en Mac. Busca la línea `TELEGRAM_BOT_TOKEN=` y pega el token justo después del signo `=`, sin espacios ni comillas alrededor. Guarda el archivo.
+
+   Este es el único secreto que necesitas configurar a mano; todo lo demás (qué propiedades vigilar, a qué chat notificar) se configura después, desde la interfaz web.
+
+3. En la misma terminal (todavía dentro de la carpeta del proyecto), levanta los servicios:
    ```bash
    docker compose up -d --build
    ```
-   Esto construye y arranca dos contenedores: `worker` (el scraper) y `web` (la API + la interfaz), ambos compartiendo la misma base de datos.
+   La primera vez puede tardar unos minutos: está descargando y construyendo las piezas necesarias. Esto arranca dos contenedores: `worker` (el scraper) y `web` (la API + la interfaz), ambos compartiendo la misma base de datos.
 4. Abre **http://localhost:8000** en tu navegador.
 5. Antes de conectar tu primera propiedad, necesitas tu **Chat ID** de Telegram:
-   - Inicia una conversación con tu bot (haz clic en "Start").
-   - Ejecuta, sin necesidad de tener Python instalado en tu máquina:
+   - Inicia una conversación con tu bot (búscalo por el usuario que le pusiste y haz clic en "Start").
+   - En tu terminal, dentro de la carpeta del proyecto, ejecuta (no necesitas tener Python instalado en tu máquina, el comando corre dentro de Docker):
      ```bash
      docker compose run --rm worker uv run --package worker python get_chat_id.py
      ```
-     Copia el Chat ID que te devuelve.
+     El comando te va a devolver un número: ese es tu Chat ID, cópialo.
 6. En la interfaz, haz clic en **"Conectar propiedad"** y completa:
    - **Nombre**: como quieras identificar el edificio.
    - **URL del polígono**: la URL del mapa de Portal Inmobiliario con el polígono dibujado (ver más abajo cómo obtenerla).
    - **Notificar en**: pega tu Chat ID para conectar tu chat de Telegram (el bot te manda un mensaje de prueba antes de guardarlo).
    - **Frecuencia**: una hora fija diaria (con su propia zona horaria) o cada N horas.
-7. Revisa los logs del worker en cualquier momento:
+7. Si quieres revisar qué está haciendo el worker (por ejemplo, para confirmar que efectivamente está revisando tu propiedad), desde la carpeta del proyecto:
    ```bash
    docker compose logs -f worker
    ```
-   (también quedan en `logs/` en tu máquina, montado como volumen).
-8. Para detenerlo:
+   Vas a ver texto apareciendo en la terminal a medida que el worker corre; para dejar de mirarlo, presiona `Ctrl+C` (esto no detiene el servicio, solo deja de mostrarte el registro). Los mismos logs también quedan guardados en la carpeta `logs/` de tu proyecto.
+8. Para detener la aplicación (por ejemplo, si quieres apagar tu computador), desde la carpeta del proyecto:
    ```bash
    docker compose down
    ```
+   Para volver a levantarla más adelante, repite el paso 3 (`docker compose up -d --build`); no hace falta repetir el resto de los pasos, tus propiedades y configuración quedan guardadas.
 
 El estado (`data/lindero.db`) y los logs (`logs/`) se guardan en tu máquina vía volúmenes, así que persisten aunque reconstruyas o reinicies los contenedores.
 
@@ -84,6 +95,8 @@ El estado (`data/lindero.db`) y los logs (`logs/`) se guardan en tu máquina ví
 5. Una vez que dibujes el área, la página generará una nueva URL en tu navegador. **Copia esa URL completa**: es la que pegas en "URL del polígono" al conectar la propiedad.
 
 ## Desarrollo (sin Docker)
+
+> Esta sección es solo para quienes quieran modificar el código de Lindero. Si únicamente quieres usarlo, no necesitas nada de lo que sigue: con la instalación con Docker de arriba ya tienes todo funcionando.
 
 Para trabajar en el código sin reconstruir contenedores en cada cambio.
 
