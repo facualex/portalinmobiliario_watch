@@ -19,10 +19,13 @@ from zoneinfo import ZoneInfo
 
 from lindero_core.db import crear_tablas, obtener_sesion
 from lindero_core.models import FrecuenciaTipo, Propiedad
-from lindero_core.repository import obtener_propiedades_que_les_toca_correr
+from lindero_core.repository import (
+    obtener_propiedades_que_les_toca_correr,
+    obtener_pruebas_pendientes,
+)
 
 from worker.logger_config import configurar_logging
-from worker.runner import ejecutar_para_propiedad
+from worker.runner import ejecutar_para_propiedad, ejecutar_prueba_url
 
 TICK_SEGUNDOS_POR_DEFECTO = 60
 DIRECTORIO_LOGS = os.getenv("LINDERO_LOGS_DIR", "logs")
@@ -66,20 +69,30 @@ def calcular_proxima_ejecucion(
 
 
 def ejecutar_tick() -> None:
-    """Procesa, secuencialmente, todas las propiedades a las que les toca correr ahora."""
+    """
+    Procesa, secuencialmente, todas las propiedades a las que les toca correr
+    ahora, y también cualquier prueba de URL pendiente. Las pruebas se resuelven
+    en el mismo tick regular (no en un bucle aparte) para no introducir una
+    frecuencia de scraping nueva: como mucho tardan hasta `tick_segundos` en
+    empezar a procesarse, igual que cualquier propiedad recién conectada.
+    """
     ahora = _ahora_utc_naive()
     with obtener_sesion() as sesion:
         propiedades = obtener_propiedades_que_les_toca_correr(sesion, ahora)
-        if not propiedades:
+        pruebas = obtener_pruebas_pendientes(sesion)
+        if not propiedades and not pruebas:
             return
 
         configurar_logging(DIRECTORIO_LOGS, MAX_LOGS_A_CONSERVAR)
         logging.info(
-            f"--- Iniciando corrida: {len(propiedades)} propiedad(es) a procesar ---"
+            f"--- Iniciando corrida: {len(propiedades)} propiedad(es) y "
+            f"{len(pruebas)} prueba(s) de URL a procesar ---"
         )
         for propiedad in propiedades:
             proxima = calcular_proxima_ejecucion(propiedad, ahora)
             ejecutar_para_propiedad(sesion, propiedad, proxima)
+        for prueba in pruebas:
+            ejecutar_prueba_url(sesion, prueba)
         logging.info("--- Corrida finalizada ---")
 
 

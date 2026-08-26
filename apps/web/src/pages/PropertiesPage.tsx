@@ -1,22 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api } from "../api/client";
 import type { ChatTelegram, Propiedad } from "../api/types";
+import { formatearRelativo } from "../lib/fechas";
+import { PropertyHistoryModal } from "../components/PropertyHistoryModal";
 import { PropertyModal } from "../components/PropertyModal";
 import { StatusPill } from "../components/StatusPill";
-
-function formatearRelativo(fechaIso: string | null): string {
-  if (!fechaIso) return "Nunca";
-  // El backend guarda datetimes naive pero siempre en UTC; sin el sufijo "Z",
-  // el motor de JS los interpretaría como hora local.
-  const fecha = new Date(`${fechaIso}Z`);
-  const diffMin = Math.round((Date.now() - fecha.getTime()) / 60000);
-
-  if (diffMin < 1) return "hace instantes";
-  if (diffMin < 60) return `hace ${diffMin} min`;
-  const diffH = Math.round(diffMin / 60);
-  if (diffH < 24) return `hace ${diffH} h`;
-  return `hace ${Math.round(diffH / 24)} d`;
-}
 
 function formatearProxima(propiedad: Propiedad): string {
   if (propiedad.pausado) return "—";
@@ -47,6 +35,7 @@ export function PropertiesPage() {
   const [busqueda, setBusqueda] = useState("");
   const [modalAbierto, setModalAbierto] = useState(false);
   const [propiedadEditando, setPropiedadEditando] = useState<Propiedad | null>(null);
+  const [propiedadHistorial, setPropiedadHistorial] = useState<Propiedad | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [idProcesando, setIdProcesando] = useState<number | null>(null);
   const [mensajeInfo, setMensajeInfo] = useState<string | null>(null);
@@ -148,17 +137,6 @@ export function PropertiesPage() {
     }
   }
 
-  async function manejarEjecutarAhora(propiedad: Propiedad) {
-    setIdProcesando(propiedad.id);
-    try {
-      const actualizada = await api.ejecutarAhora(propiedad.id);
-      actualizarEnLista(actualizada);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo forzar la ejecución.");
-    } finally {
-      setIdProcesando(null);
-    }
-  }
 
   async function manejarEliminar(propiedad: Propiedad) {
     if (!confirm(`¿Eliminar "${propiedad.nombre}"? Esta acción no se puede deshacer.`)) {
@@ -292,18 +270,19 @@ export function PropertiesPage() {
                   <div className="row-actions">
                     <button
                       className="icon-btn"
-                      title="Ejecutar ahora"
-                      disabled={procesando || propiedad.pausado}
-                      onClick={() => manejarEjecutarAhora(propiedad)}
+                      title="Ver historial"
+                      disabled={procesando}
+                      onClick={() => setPropiedadHistorial(propiedad)}
                     >
                       <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                         <path
-                          d="M13 8a5 5 0 1 1-1.6-3.7M13 3v3.2h-3.2"
+                          d="M8 4.5v4l2.8 1.6"
                           stroke="currentColor"
                           strokeWidth="1.3"
                           strokeLinecap="round"
                           strokeLinejoin="round"
                         />
+                        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3" />
                       </svg>
                     </button>
                     <button
@@ -404,6 +383,14 @@ export function PropertiesPage() {
             setPropiedadEditando(null);
             cargar();
           }}
+        />
+      )}
+
+      {propiedadHistorial && (
+        <PropertyHistoryModal
+          propiedadId={propiedadHistorial.id}
+          propiedadNombre={propiedadHistorial.nombre}
+          onClose={() => setPropiedadHistorial(null)}
         />
       )}
     </div>

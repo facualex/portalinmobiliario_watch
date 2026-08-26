@@ -1,5 +1,5 @@
-lib/
-bin/
+/lib/
+/bin/
 pyvenv.cfg
 .env
 logs/

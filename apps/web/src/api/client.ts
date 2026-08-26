@@ -1,9 +1,13 @@
 import type {
   ChatTelegram,
+  ChatTelegramActualizar,
   ChatTelegramCrear,
+  EventoPropiedad,
   Propiedad,
   PropiedadActualizar,
   PropiedadCrear,
+  PruebaUrl,
+  PruebaUrlCrear,
 } from "./types";
 
 export class ApiError extends Error {
@@ -69,11 +73,11 @@ export const api = {
   reanudarPropiedad: (id: number) =>
     solicitud<Propiedad>(`/propiedades/${id}/reanudar`, { method: "POST" }),
 
-  ejecutarAhora: (id: number) =>
-    solicitud<Propiedad>(`/propiedades/${id}/ejecutar-ahora`, { method: "POST" }),
-
   eliminarPropiedad: (id: number) =>
     solicitud<void>(`/propiedades/${id}`, { method: "DELETE" }),
+
+  listarEventos: (propiedadId: number) =>
+    solicitud<EventoPropiedad[]>(`/propiedades/${propiedadId}/eventos`),
 
   listarChats: () => solicitud<ChatTelegram[]>("/chats-telegram"),
 
@@ -82,4 +86,21 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  editarChat: (id: number, payload: ChatTelegramActualizar) =>
+    solicitud<ChatTelegram>(`/chats-telegram/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  eliminarChat: (id: number) =>
+    solicitud<void>(`/chats-telegram/${id}`, { method: "DELETE" }),
+
+  crearPruebaUrl: (payload: PruebaUrlCrear) =>
+    solicitud<PruebaUrl>("/pruebas-url", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  obtenerPruebaUrl: (id: number) => solicitud<PruebaUrl>(`/pruebas-url/${id}`),
 };

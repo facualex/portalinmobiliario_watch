@@ -188,6 +188,74 @@ class PropiedadActualizar(_ValidacionesPropiedadMixin, SQLModel):
     tz: Optional[str] = None
 
 
+class EventoTipo(str, enum.Enum):
+    activacion = "activacion"
+    cambio = "cambio"
+    error = "error"
+
+
+class EventoPropiedad(SQLModel, table=True):
+    """Historial acotado (últimos N, ver repository.MAX_EVENTOS_POR_PROPIEDAD) de
+    lo que efectivamente le pasó a una propiedad: activación, cambios de recuento
+    y errores de scraping. No incluye corridas 'sin cambios' a propósito (no es
+    un dashboard de actividad, solo lo que el usuario necesitaría revisar)."""
+
+    __tablename__ = "evento_propiedad"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    propiedad_id: int = Field(foreign_key="propiedad.id")
+    tipo: EventoTipo
+    mensaje: str
+    ocurrido_en: datetime = Field(default_factory=_ahora_utc)
+
+
+class EstadoPrueba(str, enum.Enum):
+    pendiente = "pendiente"
+    ok = "ok"
+    error = "error"
+
+
+class PruebaUrl(SQLModel, table=True):
+    """Prueba efímera de una URL (antes de conectarla, o al editarla): el
+    worker la procesa en su próximo tick igual que a cualquier propiedad
+    vencida, en vez de scrapear bajo demanda, para no sumar una frecuencia de
+    scraping distinta a la ya configurada por el usuario."""
+
+    __tablename__ = "prueba_url"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    url: str
+    estado: EstadoPrueba = EstadoPrueba.pendiente
+    recuento: Optional[int] = None
+    mensaje_error: Optional[str] = None
+    creado_en: datetime = Field(default_factory=_ahora_utc)
+    completado_en: Optional[datetime] = None
+
+
+class PruebaUrlCrear(SQLModel):
+    url: str
+
+    @field_validator("url")
+    @classmethod
+    def _check_url(cls, v):
+        return _validar_url_poligono(v)
+
+
 class ChatTelegramCrear(SQLModel):
     chat_id: str
     nombre: str
+
+
+class ChatTelegramActualizar(SQLModel):
+    """Solo permite renombrar la etiqueta del chat. Cambiar el chat_id en sí
+    requiere reconectar (borrar y crear de nuevo), para volver a verificar con
+    un mensaje de prueba que el bot puede escribirle a ese destino."""
+
+    nombre: Optional[str] = None
+
+    @field_validator("nombre")
+    @classmethod
+    def _check_nombre(cls, v):
+        if v is not None and not v.strip():
+            raise ValueError("nombre no puede estar vacío")
+        return v

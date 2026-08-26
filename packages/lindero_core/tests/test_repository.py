@@ -4,10 +4,16 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from lindero_core import repository
-from lindero_core.models import EstadoOperativo, FrecuenciaTipo
+from lindero_core.models import (
+    EstadoOperativo,
+    EstadoPrueba,
+    EventoTipo,
+    FrecuenciaTipo,
+    PruebaUrl,
+)
 
 
 def _ahora_utc_naive() -> datetime:
@@ -159,29 +165,82 @@ def test_registrar_error_scraping(sesion):
     assert actualizada.proxima_ejecucion_en == proxima
 
 
-def test_forzar_ejecucion_inmediata(sesion):
-    chat = _crear_chat(sesion)
-    propiedad = _crear_propiedad(
-        sesion,
-        chat.id,
-        proxima_ejecucion_en=_ahora_utc_naive() + timedelta(hours=5),
-    )
-
-    antes = _ahora_utc_naive()
-    actualizada = repository.forzar_ejecucion_inmediata(sesion, propiedad.id)
-    despues = _ahora_utc_naive()
-
-    assert actualizada.proxima_ejecucion_en is not None
-    assert antes <= actualizada.proxima_ejecucion_en <= despues
-
-    # Debe quedar "pendiente ya" para obtener_propiedades_que_les_toca_correr.
-    pendientes = repository.obtener_propiedades_que_les_toca_correr(sesion, despues)
-    assert propiedad.id in {p.id for p in pendientes}
-
-
 def test_chat_telegram_unico(sesion):
     repository.crear_chat_telegram(sesion, chat_id="111", nombre="Facu")
     chats = repository.listar_chats_telegram(sesion)
 
     assert len(chats) == 1
     assert chats[0].chat_id == "111"
+
+
+def test_contar_propiedades_por_chat(sesion):
+    chat = _crear_chat(sesion)
+    otro_chat = _crear_chat(sesion, chat_id="999", nombre="Otro")
+    _crear_propiedad(sesion, chat.id, nombre="A")
+    _crear_propiedad(sesion, chat.id, nombre="B")
+
+    assert repository.contar_propiedades_por_chat(sesion, chat.id) == 2
+    assert repository.contar_propiedades_por_chat(sesion, otro_chat.id) == 0
+
+
+def test_registrar_evento_recorta_al_maximo(sesion):
+    chat = _crear_chat(sesion)
+    propiedad = _crear_propiedad(sesion, chat.id)
+
+    for i in range(repository.MAX_EVENTOS_POR_PROPIEDAD + 3):
+        repository.registrar_evento(
+            sesion, propiedad.id, EventoTipo.cambio, f"Cambio número {i}"
+        )
+
+    eventos = repository.listar_eventos_propiedad(sesion, propiedad.id)
+    assert len(eventos) == repository.MAX_EVENTOS_POR_PROPIEDAD
+    # Se conservan los más recientes: el último insertado queda primero.
+    assert eventos[0].mensaje == f"Cambio número {repository.MAX_EVENTOS_POR_PROPIEDAD + 2}"
+
+
+def test_listar_eventos_propiedad_no_mezcla_otras_propiedades(sesion):
+    chat = _crear_chat(sesion)
+    propiedad_a = _crear_propiedad(sesion, chat.id, nombre="A")
+    propiedad_b = _crear_propiedad(sesion, chat.id, nombre="B")
+
+    repository.registrar_evento(sesion, propiedad_a.id, EventoTipo.activacion, "A activada")
+    repository.registrar_evento(sesion, propiedad_b.id, EventoTipo.activacion, "B activada")
+
+    eventos_a = repository.listar_eventos_propiedad(sesion, propiedad_a.id)
+    assert len(eventos_a) == 1
+    assert eventos_a[0].mensaje == "A activada"
+
+
+def test_prueba_url_ciclo_completo(sesion):
+    prueba = repository.crear_prueba_url(sesion, url="https://www.portalinmobiliario.com/x")
+    assert prueba.estado == EstadoPrueba.pendiente
+
+    pendientes = repository.obtener_pruebas_pendientes(sesion)
+    assert prueba.id in {p.id for p in pendientes}
+
+    actualizada = repository.registrar_resultado_prueba_url(
+        sesion, prueba.id, EstadoPrueba.ok, recuento=3
+    )
+    assert actualizada.estado == EstadoPrueba.ok
+    assert actualizada.recuento == 3
+    assert actualizada.completado_en is not None
+
+    # Ya no debe aparecer entre las pendientes.
+    pendientes = repository.obtener_pruebas_pendientes(sesion)
+    assert prueba.id not in {p.id for p in pendientes}
+
+
+def test_prueba_url_antigua_se_descarta_al_crear_una_nueva(sesion):
+    url_vieja = "https://www.portalinmobiliario.com/vieja"
+    vieja = repository.crear_prueba_url(sesion, url=url_vieja)
+    repository.registrar_resultado_prueba_url(sesion, vieja.id, EstadoPrueba.ok, recuento=1)
+    vieja.creado_en = _ahora_utc_naive() - repository.ANTIGUEDAD_MAXIMA_PRUEBA_URL - timedelta(minutes=1)
+    sesion.add(vieja)
+    sesion.commit()
+
+    repository.crear_prueba_url(sesion, url="https://www.portalinmobiliario.com/nueva")
+
+    # Se identifica por URL en vez de por id: SQLite puede reasignar el mismo
+    # rowid a la fila nueva una vez que la vieja se borró.
+    restantes = sesion.exec(select(PruebaUrl).where(PruebaUrl.url == url_vieja)).all()
+    assert restantes == []

@@ -59,3 +59,33 @@ export interface ChatTelegramCrear {
   chat_id: string;
   nombre: string;
 }
+
+export interface ChatTelegramActualizar {
+  nombre?: string;
+}
+
+export type EventoTipo = "activacion" | "cambio" | "error";
+
+export interface EventoPropiedad {
+  id: number;
+  propiedad_id: number;
+  tipo: EventoTipo;
+  mensaje: string;
+  ocurrido_en: string;
+}
+
+export type EstadoPrueba = "pendiente" | "ok" | "error";
+
+export interface PruebaUrl {
+  id: number;
+  url: string;
+  estado: EstadoPrueba;
+  recuento: number | null;
+  mensaje_error: string | null;
+  creado_en: string;
+  completado_en: string | null;
+}
+
+export interface PruebaUrlCrear {
+  url: string;
+}

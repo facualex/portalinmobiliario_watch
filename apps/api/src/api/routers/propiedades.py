@@ -7,6 +7,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from lindero_core import repository
 from lindero_core.models import (
+    EventoPropiedad,
     FrecuenciaTipo,
     Propiedad,
     PropiedadActualizar,
@@ -117,25 +118,21 @@ def reanudar(propiedad_id: int, sesion: Session = Depends(obtener_sesion_db)):
     return propiedad
 
 
-@router.post("/{propiedad_id}/ejecutar-ahora", response_model=Propiedad)
-def ejecutar_ahora(propiedad_id: int, sesion: Session = Depends(obtener_sesion_db)):
-    """
-    Marca la propiedad para que el worker la procese en su próximo tick (hasta
-    ~1 min), sin esperar a su hora fija/intervalo normal. No ejecuta el scraping
-    acá mismo: la API no tiene Chromium instalado (a propósito, para mantener su
-    imagen liviana), eso sigue siendo trabajo exclusivo del worker.
-    """
-    propiedad = repository.forzar_ejecucion_inmediata(sesion, propiedad_id)
-    if propiedad is None:
-        raise HTTPException(404, "Propiedad no encontrada")
-    return propiedad
-
-
 @router.delete("/{propiedad_id}", status_code=204)
 def eliminar(propiedad_id: int, sesion: Session = Depends(obtener_sesion_db)):
     eliminado = repository.eliminar_propiedad(sesion, propiedad_id)
     if not eliminado:
         raise HTTPException(404, "Propiedad no encontrada")
+
+
+@router.get("/{propiedad_id}/eventos", response_model=List[EventoPropiedad])
+def eventos(propiedad_id: int, sesion: Session = Depends(obtener_sesion_db)):
+    """Últimos eventos (activación, cambios, errores) de esta propiedad, para
+    que el usuario pueda confirmar que el monitoreo efectivamente corrió."""
+    propiedad = repository.obtener_propiedad(sesion, propiedad_id)
+    if propiedad is None:
+        raise HTTPException(404, "Propiedad no encontrada")
+    return repository.listar_eventos_propiedad(sesion, propiedad_id)
 
 
 @router.get("/{propiedad_id}/ultimo-aviso")

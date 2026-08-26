@@ -14,7 +14,7 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from lindero_core.db import crear_tablas  # noqa: E402
 
-from api.routers import chats_telegram, propiedades  # noqa: E402
+from api.routers import chats_telegram, propiedades, pruebas_url  # noqa: E402
 
 
 @asynccontextmanager
@@ -27,6 +27,7 @@ app = FastAPI(title="Lindero API", lifespan=lifespan)
 
 app.include_router(propiedades.router, prefix="/api")
 app.include_router(chats_telegram.router, prefix="/api")
+app.include_router(pruebas_url.router, prefix="/api")
 
 
 @app.get("/api/salud")

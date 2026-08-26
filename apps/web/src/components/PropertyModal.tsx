@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../api/client";
 import type { ChatTelegram, Propiedad } from "../api/types";
+
+const LIMITE_SONDEO_PRUEBA_MS = 90000;
+const INTERVALO_SONDEO_PRUEBA_MS = 4000;
 
 // Mismas reglas que packages/lindero_core/src/lindero_core/models.py, para dar
 // feedback inmediato sin ida y vuelta al servidor (que sigue siendo la fuente
@@ -92,6 +95,85 @@ export function PropertyModal({ chats, propiedad, onClose, onSaved }: Props) {
 
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [probandoUrl, setProbandoUrl] = useState(false);
+  const [resultadoPrueba, setResultadoPrueba] = useState<{
+    ok: boolean;
+    mensaje: string;
+  } | null>(null);
+  const montadoRef = useRef(true);
+
+  useEffect(
+    () => () => {
+      montadoRef.current = false;
+    },
+    [],
+  );
+
+  async function manejarProbarUrl() {
+    const url = urlPoligono.trim();
+    const errorUrl = validarUrlPoligono(url);
+    if (errorUrl) {
+      setResultadoPrueba({ ok: false, mensaje: errorUrl });
+      return;
+    }
+
+    setResultadoPrueba(null);
+    setProbandoUrl(true);
+    try {
+      const prueba = await api.crearPruebaUrl({ url });
+      sondearPrueba(prueba.id, Date.now());
+    } catch (err) {
+      if (!montadoRef.current) return;
+      setResultadoPrueba({
+        ok: false,
+        mensaje: err instanceof ApiError ? err.message : "No se pudo iniciar la prueba.",
+      });
+      setProbandoUrl(false);
+    }
+  }
+
+  async function sondearPrueba(pruebaId: number, inicio: number) {
+    if (!montadoRef.current) return;
+    try {
+      const prueba = await api.obtenerPruebaUrl(pruebaId);
+      if (!montadoRef.current) return;
+
+      if (prueba.estado === "ok") {
+        setResultadoPrueba({
+          ok: true,
+          mensaje: `Encontramos ${prueba.recuento} unidad(es) disponibles en esta URL.`,
+        });
+        setProbandoUrl(false);
+        return;
+      }
+      if (prueba.estado === "error") {
+        setResultadoPrueba({
+          ok: false,
+          mensaje: prueba.mensaje_error ?? "No se pudo verificar la URL.",
+        });
+        setProbandoUrl(false);
+        return;
+      }
+    } catch {
+      // seguimos sondeando hasta agotar el tiempo; un fallo puntual del
+      // sondeo no debería cortar la espera del resultado real.
+    }
+
+    if (Date.now() - inicio >= LIMITE_SONDEO_PRUEBA_MS) {
+      if (!montadoRef.current) return;
+      setResultadoPrueba({
+        ok: false,
+        mensaje:
+          "La prueba está tardando más de lo esperado. El worker la sigue " +
+          "procesando; podés volver a intentar en un momento.",
+      });
+      setProbandoUrl(false);
+      return;
+    }
+
+    setTimeout(() => sondearPrueba(pruebaId, inicio), INTERVALO_SONDEO_PRUEBA_MS);
+  }
 
   async function manejarSubmit(evento: React.FormEvent) {
     evento.preventDefault();
@@ -214,6 +296,27 @@ export function PropertyModal({ chats, propiedad, onClose, onSaved }: Props) {
               Pega la URL del mapa de Portal Inmobiliario con el polígono
               dibujado.
             </span>
+            <div className="prueba-url-row">
+              <button
+                type="button"
+                className="btn-probar"
+                disabled={probandoUrl || !urlPoligono.trim()}
+                onClick={manejarProbarUrl}
+              >
+                {probandoUrl ? "Probando…" : "Probar URL"}
+              </button>
+              {resultadoPrueba && (
+                <span
+                  className={
+                    resultadoPrueba.ok
+                      ? "prueba-resultado is-ok"
+                      : "prueba-resultado is-error"
+                  }
+                >
+                  {resultadoPrueba.mensaje}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="field">

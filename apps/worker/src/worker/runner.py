@@ -5,10 +5,13 @@ import logging
 import os
 
 from dotenv import load_dotenv
+from lindero_core.models import EstadoPrueba, EventoTipo
 from lindero_core.repository import (
     registrar_ejecucion_exitosa,
     registrar_error_scraping,
+    registrar_evento,
     registrar_reprogramacion_sin_cambios,
+    registrar_resultado_prueba_url,
 )
 from lindero_core.scraping import scrapear_unidades_disponibles
 from lindero_core.telegram import enviar_notificacion_telegram
@@ -26,6 +29,13 @@ SELECTOR_UNIDADES = "span.ui-search-map-marker--price__label"
 # (como en la imagen Docker) en vez de que webdriver-manager descargue uno.
 CHROME_BINARY_PATH = os.getenv("CHROME_BINARY_PATH")
 CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH")
+
+# Una prueba de URL es un chequeo manual y puntual (el usuario está esperando
+# el resultado), no la vigilancia garantizada de una propiedad real: menos
+# reintentos que MAX_INTENTOS_SCRAPING_POR_DEFECTO para no acaparar el tick del
+# worker ni sumar carga extra sobre el sitio por cada click de "Probar".
+INTENTOS_PRUEBA_URL = 2
+ESPERA_INICIAL_PRUEBA_URL_SEGUNDOS = 5
 
 
 def ejecutar_para_propiedad(sesion, propiedad, proxima_ejecucion_en):
@@ -68,10 +78,18 @@ def ejecutar_para_propiedad(sesion, propiedad, proxima_ejecucion_en):
             "Scraping falló tras agotar los reintentos",
             proxima_ejecucion_en,
         )
+        registrar_evento(
+            sesion,
+            propiedad.id,
+            EventoTipo.error,
+            "Scraping falló tras agotar los reintentos.",
+        )
         logging.info(f"--- Propiedad '{propiedad.nombre}' procesada (error) ---")
         return
 
     recuento_actual_str = str(recuento_actual)
+    tipo_evento = None
+    mensaje_evento = None
 
     if recuento_anterior is None:
         logging.info("Primera ejecución. Enviando notificación de bienvenida...")
@@ -82,6 +100,8 @@ def ejecutar_para_propiedad(sesion, propiedad, proxima_ejecucion_en):
             f"Se te notificará sobre cualquier cambio futuro."
         )
         notificacion_enviada = enviar_notificacion_telegram(BOT_TOKEN, chat_id, mensaje)
+        tipo_evento = EventoTipo.activacion
+        mensaje_evento = f"Monitoreo activado: {recuento_actual_str} unidades disponibles."
     elif recuento_anterior != recuento_actual_str:
         logging.info("¡Cambio detectado! Enviando notificación...")
         mensaje = (
@@ -90,6 +110,10 @@ def ejecutar_para_propiedad(sesion, propiedad, proxima_ejecucion_en):
             f"Revisa ahora: {propiedad.url_poligono}"
         )
         notificacion_enviada = enviar_notificacion_telegram(BOT_TOKEN, chat_id, mensaje)
+        tipo_evento = EventoTipo.cambio
+        mensaje_evento = (
+            f"Unidades disponibles cambiaron de {recuento_anterior} a {recuento_actual_str}."
+        )
     else:
         logging.info("Sin cambios detectados. No se enviará notificación.")
         notificacion_enviada = True  # No había nada que notificar.
@@ -98,6 +122,10 @@ def ejecutar_para_propiedad(sesion, propiedad, proxima_ejecucion_en):
         registrar_ejecucion_exitosa(
             sesion, propiedad.id, recuento_actual_str, proxima_ejecucion_en
         )
+        # Solo activación/cambio quedan en el historial: una corrida "sin
+        # cambios" no es algo que el usuario necesite revisar después.
+        if tipo_evento is not None:
+            registrar_evento(sesion, propiedad.id, tipo_evento, mensaje_evento)
     else:
         logging.warning(
             "No se guarda el nuevo recuento porque la notificación no pudo enviarse; "
@@ -106,3 +134,35 @@ def ejecutar_para_propiedad(sesion, propiedad, proxima_ejecucion_en):
         registrar_reprogramacion_sin_cambios(sesion, propiedad.id, proxima_ejecucion_en)
 
     logging.info(f"--- Propiedad '{propiedad.nombre}' procesada ---")
+
+
+def ejecutar_prueba_url(sesion, prueba):
+    """
+    Corre un chequeo rápido y puntual de `prueba.url` (sin crear ninguna
+    propiedad ni notificar a Telegram): sirve para validar una URL antes de
+    conectarla, o tras editarla. Usa menos reintentos que una propiedad real
+    (ver INTENTOS_PRUEBA_URL) porque acá hay un usuario esperando el resultado
+    en la UI, no la garantía de entrega de una vigilancia real.
+    """
+    logging.info(f"--- Probando URL (id={prueba.id}): {prueba.url} ---")
+    recuento = scrapear_unidades_disponibles(
+        prueba.url,
+        SELECTOR_UNIDADES,
+        chrome_binary_path=CHROME_BINARY_PATH,
+        chromedriver_path=CHROMEDRIVER_PATH,
+        max_intentos=INTENTOS_PRUEBA_URL,
+        espera_inicial_segundos=ESPERA_INICIAL_PRUEBA_URL_SEGUNDOS,
+    )
+    if recuento is None:
+        registrar_resultado_prueba_url(
+            sesion,
+            prueba.id,
+            EstadoPrueba.error,
+            mensaje_error=(
+                "No se encontraron unidades en esa URL. Revisa que el enlace "
+                "tenga el polígono dibujado y que la página cargue correctamente."
+            ),
+        )
+    else:
+        registrar_resultado_prueba_url(sesion, prueba.id, EstadoPrueba.ok, recuento=recuento)
+    logging.info(f"--- Prueba de URL (id={prueba.id}) finalizada ---")

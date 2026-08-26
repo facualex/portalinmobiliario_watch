@@ -6,7 +6,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from lindero_core import repository
-from lindero_core.models import ChatTelegram, ChatTelegramCrear
+from lindero_core.models import ChatTelegram, ChatTelegramActualizar, ChatTelegramCrear
 from lindero_core.telegram import enviar_notificacion_telegram
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
@@ -58,3 +58,31 @@ def conectar(payload: ChatTelegramCrear, sesion: Session = Depends(obtener_sesio
         # respaldo a nivel de base de datos para esos casos.
         sesion.rollback()
         raise HTTPException(409, "Ese chat_id ya está conectado")
+
+
+@router.patch("/{chat_telegram_id}", response_model=ChatTelegram)
+def actualizar(
+    chat_telegram_id: int,
+    payload: ChatTelegramActualizar,
+    sesion: Session = Depends(obtener_sesion_db),
+):
+    chat = repository.actualizar_chat_telegram(
+        sesion, chat_telegram_id, **payload.model_dump(exclude_unset=True)
+    )
+    if chat is None:
+        raise HTTPException(404, "Chat no encontrado")
+    return chat
+
+
+@router.delete("/{chat_telegram_id}", status_code=204)
+def eliminar(chat_telegram_id: int, sesion: Session = Depends(obtener_sesion_db)):
+    en_uso = repository.contar_propiedades_por_chat(sesion, chat_telegram_id)
+    if en_uso > 0:
+        raise HTTPException(
+            409,
+            f"No se puede eliminar: hay {en_uso} propiedad(es) usando este chat. "
+            "Reasígnalas a otro chat o elimínalas primero.",
+        )
+    eliminado = repository.eliminar_chat_telegram(sesion, chat_telegram_id)
+    if not eliminado:
+        raise HTTPException(404, "Chat no encontrado")
