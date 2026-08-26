@@ -1,276 +1,159 @@
-# Monitor de Unidades Inmobiliarias con Notificación por Telegram
+<p align="center">
+  <img src="./img/lindero-logo.svg" width="96" alt="Logo de Lindero" />
+</p>
 
-Este proyecto es un servicio de monitoreo automatizado que realiza web scraping a un anuncio específico en Portal Inmobiliario para rastrear la cantidad de unidades disponibles. Si detecta un cambio con respecto a la última revisión, o si es la primera vez que se ejecuta, envía una notificación instantánea a través de un bot de Telegram.
+<h1 align="center">Lindero</h1>
 
-## Características
-
--   **Web Scraping Robusto:** Utiliza `Selenium` para manejar contenido dinámico generado por JavaScript, asegurando que los datos se extraen correctamente.
--   **Detección de Cambios:** Mantiene un estado local para comparar el número de unidades actual con el anterior y notificar solo cuando es necesario.
--   **Notificaciones Instantáneas:** Se integra con la API de Telegram para enviar alertas claras y directas.
--   **Configuración Segura:** Gestiona las credenciales sensibles y los parámetros a través de un archivo `.env`.
--   **Automatización Flexible:** Incluye guías detalladas para la automatización en macOS y Linux, explicando las mejores prácticas para cada sistema.
+<p align="center">
+  Watchdog self-hosted que vigila propiedades específicas en Portal Inmobiliario<br/>
+  y te avisa por Telegram apenas cambia la disponibilidad.
+</p>
 
 ---
+
+Le dibujas un polígono a un edificio puntual en el mapa de Portal Inmobiliario, se lo pasas a Lindero, y listo: cada vez que cambia el número de unidades disponibles ahí, te llega un mensaje de Telegram. Nada de revisar un dashboard: la notificación es el producto.
+
+## Arquitectura
+
+Este repo es un monorepo con tres piezas, pensadas para correr juntas vía Docker:
+
+- **`apps/worker`**: el scraper. Un solo proceso de larga duración que revisa, cada minuto, qué propiedades tienen una corrida pendiente (según su propia frecuencia), y las procesa: scrapea con reintentos y backoff exponencial, compara contra el último recuento conocido, y notifica por Telegram si corresponde. La notificación solo se da por enviada (y el recuento se persiste) si Telegram confirmó la entrega; si falla, se reintenta en la próxima corrida en vez de perderse.
+- **`apps/api`**: backend FastAPI. Administra las propiedades y los chats de Telegram a los que notifican (alta, baja, pausar/reanudar, editar). Sin autenticación: está pensado para correr en tu propia red, no expuesto a internet.
+- **`apps/web`**: la interfaz (React). Es un panel puramente administrativo: conectar propiedades, ver su estado operativo (activo / pausado / error), gestionar a qué chat de Telegram notifica cada una. No es un dashboard de métricas: si quieres ver cuántas unidades hay, esa información ya te la mandó Telegram.
+- **`packages/lindero_core`**: lógica compartida entre el worker y la API (scraping, notificación, modelos de datos, acceso a la base).
+
+Todo el estado vive en una base **SQLite** compartida (`data/lindero.db`), sin infraestructura adicional.
 
 ## Instalación con Docker (recomendado)
 
-La forma más simple de correr el servicio: no necesitas instalar Python, Selenium, Chrome, ni configurar `cron`/`launchd`/Task Scheduler. Todo corre dentro de un contenedor con Chromium y su driver ya instalados y pareados (misma versión, sin descargas en runtime), más un programador interno (`scheduler.py`) que se encarga de las ejecuciones periódicas.
-
 ### Requisitos
 
--   [Docker](https://docs.docker.com/get-docker/) con Docker Compose.
+- [Docker](https://docs.docker.com/get-docker/) con Docker Compose.
 
 ### Pasos
 
-1.  Clona el proyecto y crea tu `.env`:
-    ```bash
-    git clone https://github.com/facualex/portalinmobiliario_watch
-    cd portalinmobiliario_watch
-    cp .env.example .env
-    ```
-2.  Completa `.env` con tus credenciales: para el bot de Telegram, el Chat ID y la URL a monitorear, sigue el **Paso 4** de la sección "Instalación Manual" más abajo — esa parte es igual la uses con Docker o sin él. Además, decide cómo quieres programar las ejecuciones:
-    -   **Por intervalo** (default): ajusta `INTERVALO_HORAS` (por defecto 24) — corre apenas arranca el contenedor y luego cada N horas.
-    -   **A una hora fija todos los días** (más parecido a `cron`): define `HORA_EJECUCION` (formato `HH:MM`, ej. `09:00`) y `TZ` con tu zona horaria IANA (ej. `America/Santiago`). Si defines `HORA_EJECUCION`, `INTERVALO_HORAS` se ignora. Sin `HORA_EJECUCION`, `TZ` solo afecta los timestamps de los logs.
-3.  Construye y levanta el servicio en segundo plano:
-    ```bash
-    docker compose up -d --build
-    ```
-    El contenedor queda corriendo de forma persistente (`restart: unless-stopped`), ejecutando el monitoreo según lo que hayas configurado en el paso anterior.
-4.  Revisa los logs en cualquier momento:
-    ```bash
-    docker compose logs -f
-    ```
-    (también quedan en `logs/` en tu máquina, montado como volumen).
-5.  Para detenerlo:
-    ```bash
-    docker compose down
-    ```
+1. Clona el proyecto y crea tu `.env`:
+   ```bash
+   git clone https://github.com/facualex/portalinmobiliario_watch
+   cd portalinmobiliario_watch
+   cp .env.example .env
+   ```
+2. Crea un bot de Telegram: en Telegram, busca a `@BotFather`, envía `/newbot` y sigue las instrucciones. Copia el **Token HTTP API** y pégalo en `.env` como `TELEGRAM_BOT_TOKEN`. Es el único secreto que necesitas configurar a mano; todo lo demás (qué propiedades vigilar, a qué chat notificar) se configura después, desde la interfaz web.
+3. Levanta los servicios:
+   ```bash
+   docker compose up -d --build
+   ```
+   Esto construye y arranca dos contenedores: `worker` (el scraper) y `web` (la API + la interfaz), ambos compartiendo la misma base de datos.
+4. Abre **http://localhost:8000** en tu navegador.
+5. Antes de conectar tu primera propiedad, necesitas tu **Chat ID** de Telegram:
+   - Inicia una conversación con tu bot (haz clic en "Start").
+   - Ejecuta, sin necesidad de tener Python instalado en tu máquina:
+     ```bash
+     docker compose run --rm worker uv run --package worker python get_chat_id.py
+     ```
+     Copia el Chat ID que te devuelve.
+6. En la interfaz, haz clic en **"Conectar propiedad"** y completa:
+   - **Nombre**: como quieras identificar el edificio.
+   - **URL del polígono**: la URL del mapa de Portal Inmobiliario con el polígono dibujado (ver más abajo cómo obtenerla).
+   - **Notificar en**: pega tu Chat ID para conectar tu chat de Telegram (el bot te manda un mensaje de prueba antes de guardarlo).
+   - **Frecuencia**: una hora fija diaria (con su propia zona horaria) o cada N horas.
+7. Revisa los logs del worker en cualquier momento:
+   ```bash
+   docker compose logs -f worker
+   ```
+   (también quedan en `logs/` en tu máquina, montado como volumen).
+8. Para detenerlo:
+   ```bash
+   docker compose down
+   ```
 
-El estado (`data/ultimo_recuento.txt`) y los logs (`logs/`) se guardan en tu máquina vía volúmenes, así que persisten aunque reconstruyas o reinicies el contenedor.
+El estado (`data/lindero.db`) y los logs (`logs/`) se guardan en tu máquina vía volúmenes, así que persisten aunque reconstruyas o reinicies los contenedores.
 
-> **¿Ya tienes esto funcionando con Docker?** Puedes saltarte por completo la sección "Automatización (Ejecución Diaria)" más abajo — es solo para quienes instalan sin Docker.
+### Obtener la URL del polígono de un edificio
 
----
+1. Visita la página de arriendos (vista mapa) de [Portal Inmobiliario](https://www.portalinmobiliario.com/arriendo/departamento/_DisplayType_M).
+2. Navega en el mapa hasta encontrar el edificio que deseas monitorear.
+3. En la parte superior derecha del mapa, haz clic en la herramienta **`Dibujar área`**.
 
-## Instalación Manual (sin Docker)
+   ![Herramienta 'Dibujar área' en el mapa de Portal Inmobiliario](./img/1.png)
 
-Si prefieres no usar Docker, sigue estos pasos para instalar Python, Selenium y configurar la automatización según tu sistema operativo.
+4. Dibuja un polígono lo más ajustado posible alrededor del edificio. Esto es **crucial** para que el scraping solo cuente las unidades de esa ubicación específica.
 
-### Requisitos Previos
+   ![Ejemplo de un polígono dibujado alrededor de un edificio específico](./img/2.png)
 
--   Python 3.8 o superior instalado.
--   Acceso a la línea de comandos (Terminal en macOS/Linux).
+5. Una vez que dibujes el área, la página generará una nueva URL en tu navegador. **Copia esa URL completa**: es la que pegas en "URL del polígono" al conectar la propiedad.
 
-### Paso 1: Obtener el Proyecto
+## Desarrollo (sin Docker)
 
-Primero, obtenga los archivos del proyecto en su máquina local.
+Para trabajar en el código sin reconstruir contenedores en cada cambio.
 
-```bash
-# Si usa git
-git clone https://github.com/facualex/portalinmobiliario_watch
-cd portalinmobiliario_watch
-```
+### Requisitos
 
-### Paso 2: Crear y Activar un Entorno Virtual
+- Python 3.12+ y [uv](https://docs.astral.sh/uv/).
+- Node.js 20+ (para el frontend).
 
-Es una **práctica esencial** aislar las dependencias del proyecto para no afectar la instalación global de Python.
-
-```bash
-# Crear el entorno virtual (la carpeta se llamará 'venv')
-python3 -m venv venv
-
-# Activar el entorno virtual
-source venv/bin/activate
-
-# (Cuando termines de trabajar, para desactivarlo, simplemente escribe: deactivate)
-```
-
-### Paso 3: Instalar las Dependencias
-
-Con el entorno virtual activado, instale todas las librerías necesarias.
+### Backend (worker + API)
 
 ```bash
-pip install -r requirements.txt
+uv sync --all-packages         # instala todo el workspace (worker, api, lindero_core)
+cp .env.example .env          # completa al menos TELEGRAM_BOT_TOKEN
+
+# Correr el worker (bucle infinito, revisa propiedades cada 60s):
+uv run --package worker python -m worker.scheduler
+
+# Correr la API (recarga en caliente), en otra terminal:
+uv run --package api uvicorn api.main:app --reload --app-dir apps/api/src
 ```
 
-### Paso 4: Configurar los Parámetros y Credenciales (`.env`)
+### Frontend
 
-Este archivo centralizará toda la configuración.
-
-#### 4.1. Crear el archivo `.env`
-En la raíz del proyecto encontrarás `.env.example`, una plantilla con todas las variables necesarias. Copiala como `.env`:
-```bash
-cp .env.example .env
-```
-
-#### 4.2. Configurar el Bot de Telegram
--   En Telegram, busca a `@BotFather`, envía `/newbot` y sigue las instrucciones para crear tu bot. Copia el **Token HTTP API**.
--   Inicia una conversación con tu nuevo bot (haz clic en "Start").
--   Ejecuta `python get_chat_id.py` en tu terminal, Este script te devolverá tu **Chat ID**. Cópialo.
-
-#### 4.3. Obtener la URL Específica del Edificio
-El script requiere una URL especial que contenga las coordenadas del polígono geográfico que has dibujado.
-
-1.  Visita la página de arriendos (vista mapa) de [Portal Inmobiliario](https://www.portalinmobiliario.com/arriendo/departamento/_DisplayType_M).
-2.  Navega en el mapa hasta encontrar el edificio que deseas monitorear.
-3.  En la parte superior derecha del mapa, haz clic en la herramienta **`Dibujar área`**.
-
-    ![Herramienta 'Dibujar área' en el mapa de Portal Inmobiliario](./img/1.png)
-
-4.  Dibuja un polígono lo más ajustado posible alrededor del edificio. Esto es **crucial** para que el script solo detecte las unidades de esa ubicación específica.
-
-    ![Ejemplo de un polígono dibujado alrededor de un edificio específico](./img/2.png)
-
-5.  Una vez que dibujes el área, la página generará una nueva URL en tu navegador. **Copia esta URL completa**.
-
-#### 4.4. Completar el archivo `.env`
-Abre el archivo `.env` (creado a partir de `.env.example`) y completa cada variable con la información que recopilaste. Piensa en un nombre corto para la propiedad (ej. "Edificio Manuel Montt") para la variable `NOMBRE_PROPIEDAD`.
-
-Tu archivo final debe verse así:
-```env
-TELEGRAM_BOT_TOKEN="[TU_BOT_TOKEN_AQUI]"
-TELEGRAM_CHAT_ID="[TU_CHAT_ID_AQUI]"
-URL_A_MONITOREAR="[URL_COPIADA_DEL_NAVEGADOR]"
-NOMBRE_PROPIEDAD="[NOMBRE_IDENTIFICADOR_DE_LA_PROPIEDAD]"
-```
-
----
-
-## Uso Manual (Prueba de Funcionamiento)
-
-Para verificar que toda la configuración es correcta, ejecuta el script manualmente.
+En otra terminal:
 
 ```bash
-# Asegúrate de que tu entorno virtual esté activado
-python monitor.py
+cd apps/web
+npm install
+npm run dev
 ```
-La primera vez que lo ejecutes, deberías recibir una notificación de bienvenida en Telegram.
 
----
+Abre **http://localhost:5173**. Vite reenvía las llamadas a `/api` hacia la API en el puerto 8000, así que ambas corren a la vez sin configuración adicional.
 
-## Automatización (Ejecución Diaria)
+### Tests
 
-> Esta sección aplica solo a la instalación manual (sin Docker). Si usas Docker, el programador interno ya se encarga de esto — no necesitas nada de lo siguiente.
-
-Para que el script se convierta en un "servicio", debe ejecutarse automáticamente. El método depende del sistema operativo:
-
-### Linux / macOS (básico): `cron`
-
-1.  Abre tu editor de `crontab`: `crontab -e`
-2.  Añade la siguiente línea para ejecutar el script todos los días a las 9:00 AM:
-    ```cron
-    0 9 * * * cd /ruta/completa/a/tu/proyecto && /ruta/completa/a/tu/proyecto/venv/bin/python monitor.py
-    ```
-    -   **Importante:** Reemplaza `/ruta/completa/a/tu/proyecto` con tu ruta absoluta. El `cd` es crucial para que el script encuentre el archivo `.env`.
-
-> **Limitación Importante de `cron` en macOS:** Si tu Mac está en modo de reposo (tapa cerrada) o apagado a la hora programada, **el `cron` job simplemente se salta esa ejecución** y no hay forma de recuperarla. Para macOS, el método `launchd` es la solución recomendada.
-
-### macOS (recomendado): `launchd`
-
-`launchd` es el sistema moderno y robusto de Apple para gestionar tareas programadas. A diferencia de `cron`, cuando usa `StartCalendarInterval` (como en este proyecto), `launchd` recuerda la última vez que corrió la tarea: si el Mac estaba dormido o apagado a la hora programada, en cuanto el equipo vuelve a estar disponible, `launchd` detecta que se perdió una ejecución y la corre en ese momento. Por eso es la opción recomendada para un monitoreo diario confiable en una laptop que no siempre está encendida o despierta a la hora exacta.
-
-**1. Crear el Archivo de Servicio (`.plist`):**
-Crea un archivo llamado `com.tunombre.mmscrapewatcher.plist` (cambia "tunombre") y pega el siguiente contenido. Asegúrate de actualizar las rutas.
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.tunombre.mmscrapewatcher</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/ruta/completa/a/tu/proyecto/venv/bin/python</string>
-        <string>/ruta/completa/a/tu/proyecto/monitor.py</string>
-    </array>
-    <key>WorkingDirectory</key>
-    <string>/ruta/completa/a/tu/proyecto</string>
-    <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>
-        <integer>9</integer>
-        <key>Minute</key>
-        <integer>0</integer>
-    </dict>
-</dict>
-</plist>
-```
-No es necesario configurar `StandardOutPath`/`StandardErrorPath`: el propio script registra cada ejecución en su carpeta `logs/` (ver [Registro de Ejecuciones (Logs)](#registro-de-ejecuciones-logs)).
-
-**2. Mover y Cargar el Servicio:**
 ```bash
-# Mover el archivo
-mv com.tunombre.mmscrapewatcher.plist ~/Library/LaunchAgents/
-
-# Cargar el servicio en launchd
-launchctl load ~/Library/LaunchAgents/com.tunombre.mmscrapewatcher.plist
+uv run pytest packages/lindero_core/tests/
 ```
-Tu servicio ahora está correctamente configurado. Puedes forzar una ejecución de prueba con `launchctl start com.tunombre.mmscrapewatcher`.
-
-### Windows: Programador de Tareas
-
-Windows no tiene `cron`; su equivalente nativo es el **Programador de Tareas** (Task Scheduler). Como `python-dotenv` busca el archivo `.env` a partir del directorio de trabajo actual, es fundamental que la tarea se ejecute posicionada en la carpeta del proyecto, no solo que se invoque el script.
-
-**1. Crear un archivo `.bat` que fije el directorio de trabajo:**
-
-En la raíz del proyecto, crea `run_monitor.bat`:
-```bat
-@echo off
-cd /d "C:\ruta\completa\a\tu\proyecto"
-"C:\ruta\completa\a\tu\proyecto\venv\Scripts\python.exe" monitor.py
-```
--   **Importante:** Reemplaza `C:\ruta\completa\a\tu\proyecto` con la ruta absoluta real de tu proyecto en ambas líneas.
-
-**2. Programar la tarea con `schtasks` (línea de comandos):**
-
-Abre `cmd.exe` o PowerShell como el usuario que ejecutará la tarea y corre:
-```cmd
-schtasks /create /tn "PortalInmobiliarioWatch" /tr "C:\ruta\completa\a\tu\proyecto\run_monitor.bat" /sc daily /st 09:00
-```
--   `/sc daily /st 09:00` programa la ejecución diaria a las 9:00 AM. Ajusta el horario a tu preferencia.
--   Puedes forzar una ejecución de prueba con: `schtasks /run /tn "PortalInmobiliarioWatch"`
--   Para eliminar la tarea: `schtasks /delete /tn "PortalInmobiliarioWatch" /f`
-
-**3. Alternativa por interfaz gráfica:**
-
-Si prefieres no usar la línea de comandos, abre **Programador de Tareas** (busca "Task Scheduler" en el menú de inicio) y crea una tarea básica:
--   **Desencadenador:** Diario, a la hora que prefieras.
--   **Acción:** "Iniciar un programa", apuntando a `run_monitor.bat`.
--   En **Opciones avanzadas** de la acción, asegúrate de que **"Iniciar en" (Start in)** apunte a la carpeta del proyecto — esto reemplaza al `cd /d` del `.bat` si prefieres invocar `python.exe` directamente en vez del script `.bat`.
--   En la pestaña **Condiciones**, si tu equipo suele estar en suspensión, habilita **"Reactivar el equipo para ejecutar esta tarea"**.
 
 ## Registro de Ejecuciones (Logs)
 
-El script gestiona sus propios logs, independientemente de si corre con Docker, con el programador interno, o vía `cron`/`launchd`/Task Scheduler.
+El **worker** gestiona sus propios logs, independientemente de si corre con Docker o localmente:
 
--   Cada ejecución crea un archivo dentro de `logs/`, nombrado con el timestamp de inicio: `logs/AAAA-MM-DD_HHMMSS.log`.
--   Cada línea del archivo también incluye su propio timestamp interno.
--   El mismo contenido se imprime en consola (útil para la ejecución manual de prueba).
--   Solo se conservan los **10 logs más recientes**; al iniciar una nueva ejecución se eliminan automáticamente los más antiguos.
-
-Esto reemplaza cualquier necesidad de redirigir `stdout`/`stderr` a mano (por eso el `.plist` de `launchd` ya no define `StandardOutPath`/`StandardErrorPath`).
+- Cada corrida con al menos una propiedad procesada crea un archivo dentro de `logs/`, nombrado con el timestamp de inicio: `logs/AAAA-MM-DD_HHMMSS.log` (los ticks sin nada que hacer no generan archivo, para no llenar la carpeta).
+- Cada línea del archivo también incluye su propio timestamp interno.
+- El mismo contenido se imprime en consola.
+- Solo se conservan los **10 logs más recientes**; al iniciar una nueva corrida se eliminan automáticamente los más antiguos.
 
 ## Estructura del Proyecto
 
 ```
 .
-├── .env                  # Archivo de configuración (NO subir a git)
-├── .env.example          # Plantilla de configuración (sí se sube a git)
-├── .dockerignore         # Excluye archivos innecesarios del build de la imagen
-├── data/                 # Estado persistente (ultimo_recuento.txt), montado como volumen en Docker
-├── docker-compose.yml    # Levanta el servicio en un contenedor con Chromium incluido
-├── Dockerfile            # Imagen: Python + Chromium + chromedriver pareados
-├── estado.py             # Persistencia del último recuento conocido
-├── get_chat_id.py        # Script de utilidad para obtener el Chat ID
-├── img/                  # Carpeta con imágenes para la documentación
-│   ├── 1.png
-│   └── 2.png
-├── logger_config.py      # Configuración reutilizable de logging (consola + archivo por ejecución)
-├── logs/                 # Logs de ejecución, últimos 10 (se genera solo)
-├── monitor.py            # Script principal de scraping y orquestación
-├── requirements.txt      # Lista de dependencias de Python
-├── scheduler.py          # Programador interno: corre monitor.main() en bucle
-├── telegram_notifier.py  # Envío de notificaciones vía bot de Telegram
-└── README.md             # Esta documentación
+├── .env / .env.example      # TELEGRAM_BOT_TOKEN, DB_PATH, LINDERO_TICK_SEGUNDOS
+├── docker-compose.yml       # 2 servicios: worker, web
+├── pyproject.toml / uv.lock # workspace de uv (worker + api + lindero_core)
+├── get_chat_id.py           # utilidad para obtener tu Chat ID de Telegram
+├── img/                     # logo y capturas de la documentación
+├── data/                    # lindero.db (SQLite), montado como volumen
+├── logs/                    # logs del worker, últimos 10 (se genera solo)
+│
+├── packages/
+│   └── lindero_core/        # lógica compartida: scraping, telegram, modelos, DB
+│       ├── src/lindero_core/{scraping,telegram,models,db,repository}.py
+│       └── tests/
+│
+└── apps/
+    ├── worker/               # el scraper (Dockerfile: Python + Chromium + chromedriver)
+    │   └── src/worker/{scheduler,runner,logger_config}.py
+    ├── api/                  # backend FastAPI (Dockerfile: multi-stage, build del frontend incluido)
+    │   └── src/api/{main,deps}.py + routers/{propiedades,chats_telegram}.py
+    └── web/                  # frontend React + Vite (sin Dockerfile propio)
+        └── src/{App.tsx, pages/, components/, api/, styles/}
 ```

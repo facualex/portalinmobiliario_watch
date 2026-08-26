@@ -1,0 +1,19 @@
+[project]
+name = "lindero"
+version = "0.1.0"
+description = "Monorepo de Lindero: worker de scraping + API/web (self-hosted)"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["packages/lindero_core", "apps/worker", "apps/api"]
+
+[dependency-groups]
+dev = ["pytest==8.4.2"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["packages/lindero_core/src/lindero_core"]

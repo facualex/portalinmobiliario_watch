@@ -9,5 +9,7 @@ logs/
 data/
 ultimo_recuento.txt
 img/
-launchd/
 README.md
+node_modules/
+apps/web/dist/
+*.tsbuildinfo
