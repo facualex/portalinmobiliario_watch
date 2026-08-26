@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api } from "../api/client";
 import type { ChatTelegram, Propiedad } from "../api/types";
 import { PropertyModal } from "../components/PropertyModal";
@@ -20,7 +20,10 @@ function formatearRelativo(fechaIso: string | null): string {
 
 function formatearProxima(propiedad: Propiedad): string {
   if (propiedad.pausado) return "—";
-  if (!propiedad.proxima_ejecucion_en) return "Pendiente";
+  // proxima_ejecucion_en es null solo cuando la propiedad nunca corrió, y esa
+  // es justo la condición que el worker interpreta como "pendiente ya" (la
+  // recoge en el próximo tick) — mismo caso que "En el próximo chequeo" abajo.
+  if (!propiedad.proxima_ejecucion_en) return "En el próximo chequeo";
 
   const fecha = new Date(`${propiedad.proxima_ejecucion_en}Z`);
   const diffMin = Math.round((fecha.getTime() - Date.now()) / 60000);
@@ -46,6 +49,45 @@ export function PropertiesPage() {
   const [propiedadEditando, setPropiedadEditando] = useState<Propiedad | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [idProcesando, setIdProcesando] = useState<number | null>(null);
+  const [mensajeInfo, setMensajeInfo] = useState<string | null>(null);
+  const refrescoIntervalRef = useRef<number | null>(null);
+  const refrescoTimeoutRef = useRef<number | null>(null);
+
+  function detenerRefrescoTemporal() {
+    if (refrescoIntervalRef.current !== null) {
+      window.clearInterval(refrescoIntervalRef.current);
+      refrescoIntervalRef.current = null;
+    }
+    if (refrescoTimeoutRef.current !== null) {
+      window.clearTimeout(refrescoTimeoutRef.current);
+      refrescoTimeoutRef.current = null;
+    }
+  }
+
+  function iniciarRefrescoTemporal(propiedadId: number) {
+    detenerRefrescoTemporal();
+
+    const verificar = async () => {
+      try {
+        const lista = await api.listarPropiedades();
+        setPropiedades(lista);
+        const objetivo = lista.find((p) => p.id === propiedadId);
+        if (objetivo && objetivo.ultima_verificacion_en) {
+          detenerRefrescoTemporal();
+        }
+      } catch {
+        // si falla un ciclo de polling no interrumpimos el resto, se reintenta
+        // en el próximo tick del intervalo.
+      }
+    };
+
+    refrescoIntervalRef.current = window.setInterval(verificar, 5000);
+    refrescoTimeoutRef.current = window.setTimeout(detenerRefrescoTemporal, 90000);
+  }
+
+  useEffect(() => {
+    return () => detenerRefrescoTemporal();
+  }, []);
 
   async function cargar() {
     setError(null);
@@ -173,6 +215,20 @@ export function PropertiesPage() {
       </div>
 
       {error && <div className="error-banner">{error}</div>}
+
+      {mensajeInfo && (
+        <div className="info-banner">
+          <span>{mensajeInfo}</span>
+          <button
+            className="info-banner-close"
+            onClick={() => setMensajeInfo(null)}
+            type="button"
+            aria-label="Cerrar aviso"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {propiedadesFiltradas.length === 0 ? (
         <div className="empty-state">
@@ -326,9 +382,15 @@ export function PropertiesPage() {
         <PropertyModal
           chats={chats}
           onClose={() => setModalAbierto(false)}
-          onSaved={() => {
+          onSaved={(creada) => {
             setModalAbierto(false);
             cargar();
+            if (creada) {
+              setMensajeInfo(
+                "En menos de 1 minuto vas a recibir un mensaje de Telegram confirmando que el monitoreo arrancó.",
+              );
+              iniciarRefrescoTemporal(creada.id);
+            }
           }}
         />
       )}

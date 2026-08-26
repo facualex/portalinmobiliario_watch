@@ -3,10 +3,78 @@
 y los schemas de la futura API (FastAPI los usa directamente para (de)serializar)."""
 
 import enum
+import re
 from datetime import datetime, timezone
 from typing import List, Optional
+from urllib.parse import urlparse
+from zoneinfo import available_timezones
 
+from pydantic import field_validator, model_validator
 from sqlmodel import Field, Relationship, SQLModel
+
+# --- Reglas de validación compartidas por PropiedadCrear y PropiedadActualizar ---
+
+_PATRON_HORA = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+_INTERVALO_MINIMO_HORAS = 1.0
+_DOMINIO_URL_PERMITIDO = "portalinmobiliario.com"
+
+
+def _validar_hora_ejecucion(valor: Optional[str]) -> Optional[str]:
+    if valor is not None and not _PATRON_HORA.match(valor):
+        raise ValueError("hora_ejecucion debe tener formato HH:MM (24 horas), ej: 09:00")
+    return valor
+
+
+def _validar_tz(valor: Optional[str]) -> Optional[str]:
+    if valor is not None and valor not in available_timezones():
+        raise ValueError(f"'{valor}' no es una zona horaria IANA válida (ej: America/Santiago)")
+    return valor
+
+
+def _validar_intervalo_horas(valor: Optional[float]) -> Optional[float]:
+    if valor is not None and valor < _INTERVALO_MINIMO_HORAS:
+        raise ValueError(f"intervalo_horas debe ser al menos {_INTERVALO_MINIMO_HORAS}")
+    return valor
+
+
+def _validar_url_poligono(valor: Optional[str]) -> Optional[str]:
+    if valor is not None:
+        partes = urlparse(valor)
+        host = (partes.hostname or "").lower()
+        es_dominio_valido = host == _DOMINIO_URL_PERMITIDO or host.endswith(
+            f".{_DOMINIO_URL_PERMITIDO}"
+        )
+        if partes.scheme not in ("http", "https") or not es_dominio_valido:
+            raise ValueError(
+                f"La URL debe ser de {_DOMINIO_URL_PERMITIDO} "
+                f"(ej: https://www.portalinmobiliario.com/...)"
+            )
+    return valor
+
+
+class _ValidacionesPropiedadMixin:
+    """Validadores de campo compartidos entre PropiedadCrear y PropiedadActualizar.
+    Aplican por igual en un alta completa o en una edición parcial."""
+
+    @field_validator("hora_ejecucion")
+    @classmethod
+    def _check_hora_ejecucion(cls, v):
+        return _validar_hora_ejecucion(v)
+
+    @field_validator("tz")
+    @classmethod
+    def _check_tz(cls, v):
+        return _validar_tz(v)
+
+    @field_validator("intervalo_horas")
+    @classmethod
+    def _check_intervalo_horas(cls, v):
+        return _validar_intervalo_horas(v)
+
+    @field_validator("url_poligono")
+    @classmethod
+    def _check_url_poligono(cls, v):
+        return _validar_url_poligono(v)
 
 
 def _ahora_utc() -> datetime:
@@ -76,7 +144,7 @@ class Propiedad(SQLModel, table=True):
 # setear campos como `id`, `estado_operativo` o `ultimo_recuento` al crear/editar.
 
 
-class PropiedadCrear(SQLModel):
+class PropiedadCrear(_ValidacionesPropiedadMixin, SQLModel):
     nombre: str
     url_poligono: str
     comuna: Optional[str] = None
@@ -87,8 +155,28 @@ class PropiedadCrear(SQLModel):
     intervalo_horas: Optional[float] = None
     tz: str = "UTC"
 
+    @model_validator(mode="after")
+    def _check_frecuencia_consistente(self):
+        if self.frecuencia_tipo == FrecuenciaTipo.hora_fija and not self.hora_ejecucion:
+            raise ValueError(
+                "hora_ejecucion es obligatoria cuando frecuencia_tipo es 'hora_fija'"
+            )
+        if self.frecuencia_tipo == FrecuenciaTipo.intervalo and not self.intervalo_horas:
+            raise ValueError(
+                "intervalo_horas es obligatorio cuando frecuencia_tipo es 'intervalo'"
+            )
+        return self
 
-class PropiedadActualizar(SQLModel):
+
+class PropiedadActualizar(_ValidacionesPropiedadMixin, SQLModel):
+    """
+    Igual que PropiedadCrear pero con todo opcional (PATCH parcial). La
+    consistencia cruzada entre frecuencia_tipo y hora_ejecucion/intervalo_horas
+    no se valida acá: como es una edición parcial, hace falta el estado actual
+    de la propiedad para saber qué valor rige tras el merge — eso se valida en
+    el router (api/routers/propiedades.py), no en el schema.
+    """
+
     nombre: Optional[str] = None
     url_poligono: Optional[str] = None
     comuna: Optional[str] = None

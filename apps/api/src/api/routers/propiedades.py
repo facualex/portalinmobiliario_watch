@@ -6,7 +6,12 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from lindero_core import repository
-from lindero_core.models import Propiedad, PropiedadActualizar, PropiedadCrear
+from lindero_core.models import (
+    FrecuenciaTipo,
+    Propiedad,
+    PropiedadActualizar,
+    PropiedadCrear,
+)
 from lindero_core.telegram import enviar_notificacion_telegram
 from sqlmodel import Session
 
@@ -43,13 +48,34 @@ def actualizar(
     payload: PropiedadActualizar,
     sesion: Session = Depends(obtener_sesion_db),
 ):
+    propiedad_existente = repository.obtener_propiedad(sesion, propiedad_id)
+    if propiedad_existente is None:
+        raise HTTPException(404, "Propiedad no encontrada")
+
     campos = payload.model_dump(exclude_unset=True)
     if "chat_telegram_id" in campos:
         if repository.obtener_chat_telegram(sesion, campos["chat_telegram_id"]) is None:
             raise HTTPException(404, "El chat de Telegram indicado no existe")
+
+    # PropiedadActualizar no valida esto por ser una edición parcial (ver su
+    # docstring): hay que mirar el resultado DESPUÉS del merge con lo existente.
+    frecuencia_resultante = campos.get(
+        "frecuencia_tipo", propiedad_existente.frecuencia_tipo
+    )
+    hora_resultante = campos.get("hora_ejecucion", propiedad_existente.hora_ejecucion)
+    intervalo_resultante = campos.get(
+        "intervalo_horas", propiedad_existente.intervalo_horas
+    )
+    if frecuencia_resultante == FrecuenciaTipo.hora_fija and not hora_resultante:
+        raise HTTPException(
+            422, "hora_ejecucion es obligatoria cuando frecuencia_tipo es 'hora_fija'"
+        )
+    if frecuencia_resultante == FrecuenciaTipo.intervalo and not intervalo_resultante:
+        raise HTTPException(
+            422, "intervalo_horas es obligatorio cuando frecuencia_tipo es 'intervalo'"
+        )
+
     propiedad = repository.actualizar_propiedad(sesion, propiedad_id, **campos)
-    if propiedad is None:
-        raise HTTPException(404, "Propiedad no encontrada")
     return propiedad
 
 

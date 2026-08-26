@@ -2,12 +2,66 @@ import { useState } from "react";
 import { ApiError, api } from "../api/client";
 import type { ChatTelegram, Propiedad } from "../api/types";
 
+// Mismas reglas que packages/lindero_core/src/lindero_core/models.py, para dar
+// feedback inmediato sin ida y vuelta al servidor (que sigue siendo la fuente
+// de verdad: si algo se le escapa a esta validación, el 422 del backend lo ataja).
+const DOMINIO_URL_PERMITIDO = "portalinmobiliario.com";
+const INTERVALO_MINIMO_HORAS = 1;
+
+function validarUrlPoligono(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return "La URL no es válida.";
+  }
+  const host = parsed.hostname.toLowerCase();
+  const esDominioValido =
+    host === DOMINIO_URL_PERMITIDO || host.endsWith(`.${DOMINIO_URL_PERMITIDO}`);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return "La URL debe empezar con http:// o https://.";
+  }
+  if (!esDominioValido) {
+    return `La URL debe ser de ${DOMINIO_URL_PERMITIDO} (ej: https://www.portalinmobiliario.com/...).`;
+  }
+  return null;
+}
+
+function validarHoraEjecucion(hora: string): string | null {
+  if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(hora)) {
+    return "La hora debe tener formato HH:MM (24 horas).";
+  }
+  return null;
+}
+
+function validarTz(tz: string): string | null {
+  if (!tz.trim()) return "La zona horaria es obligatoria.";
+  // Intl.supportedValuesOf está disponible en navegadores modernos (2022+); si
+  // no lo está, dejamos que el 422 del servidor sea el que valide esto.
+  if (typeof Intl.supportedValuesOf === "function") {
+    const validas = Intl.supportedValuesOf("timeZone");
+    if (!validas.includes(tz)) {
+      return `"${tz}" no parece ser una zona horaria IANA válida (ej: America/Santiago).`;
+    }
+  }
+  return null;
+}
+
+function validarIntervaloHoras(valor: string): string | null {
+  const numero = Number(valor);
+  if (!Number.isFinite(numero) || numero < INTERVALO_MINIMO_HORAS) {
+    return `El intervalo debe ser de al menos ${INTERVALO_MINIMO_HORAS} hora(s).`;
+  }
+  return null;
+}
+
 interface Props {
   chats: ChatTelegram[];
   /** Si viene, el modal edita esta propiedad en vez de crear una nueva. */
   propiedad?: Propiedad;
   onClose: () => void;
-  onSaved: () => void;
+  /** Al crear, recibe la propiedad recién creada (para poder seguirle el rastro). */
+  onSaved: (creada?: Propiedad) => void;
 }
 
 export function PropertyModal({ chats, propiedad, onClose, onSaved }: Props) {
@@ -47,6 +101,13 @@ export function PropertyModal({ chats, propiedad, onClose, onSaved }: Props) {
       setError("Nombre y URL del polígono son obligatorios.");
       return;
     }
+
+    const errorUrl = validarUrlPoligono(urlPoligono.trim());
+    if (errorUrl) {
+      setError(errorUrl);
+      return;
+    }
+
     if (modoChat === "nuevo" && (!nuevoChatId.trim() || !nuevoChatNombre.trim())) {
       setError("Completa el chat_id y un nombre para el chat nuevo.");
       return;
@@ -54,6 +115,25 @@ export function PropertyModal({ chats, propiedad, onClose, onSaved }: Props) {
     if (modoChat === "existente" && !chatSeleccionado) {
       setError("Selecciona un chat de Telegram.");
       return;
+    }
+
+    if (frecuenciaTipo === "hora_fija") {
+      const errorHora = validarHoraEjecucion(horaEjecucion);
+      if (errorHora) {
+        setError(errorHora);
+        return;
+      }
+      const errorTz = validarTz(tz);
+      if (errorTz) {
+        setError(errorTz);
+        return;
+      }
+    } else {
+      const errorIntervalo = validarIntervaloHoras(intervaloHoras);
+      if (errorIntervalo) {
+        setError(errorIntervalo);
+        return;
+      }
     }
 
     setEnviando(true);
@@ -82,11 +162,11 @@ export function PropertyModal({ chats, propiedad, onClose, onSaved }: Props) {
 
       if (editando) {
         await api.editarPropiedad(propiedad.id, payload);
+        onSaved();
       } else {
-        await api.crearPropiedad(payload);
+        const creada = await api.crearPropiedad(payload);
+        onSaved(creada);
       }
-
-      onSaved();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Ocurrió un error inesperado.");
     } finally {

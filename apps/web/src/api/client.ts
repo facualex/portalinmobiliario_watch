@@ -24,7 +24,18 @@ async function solicitud<T>(ruta: string, opciones?: RequestInit): Promise<T> {
     let detalle = respuesta.statusText;
     try {
       const cuerpo = await respuesta.json();
-      detalle = cuerpo.detail ?? detalle;
+      if (typeof cuerpo.detail === "string") {
+        // HTTPException(status, "mensaje") nuestro, ej. desde los routers.
+        detalle = cuerpo.detail;
+      } else if (Array.isArray(cuerpo.detail)) {
+        // Error de validación automático de FastAPI/Pydantic (422): una lista
+        // de objetos {msg, loc, type}, no un string.
+        detalle =
+          cuerpo.detail
+            .map((e: { msg?: string }) => e.msg?.replace(/^Value error, /, ""))
+            .filter(Boolean)
+            .join(" | ") || detalle;
+      }
     } catch {
       // el cuerpo de error no era JSON, nos quedamos con statusText
     }

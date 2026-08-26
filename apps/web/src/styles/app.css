@@ -292,6 +292,35 @@ select {
   margin-bottom: 16px;
 }
 
+.info-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(29, 78, 216, 0.08);
+  color: var(--accent-strong);
+  border: 1px solid rgba(29, 78, 216, 0.25);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.info-banner-close {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 4px;
+  opacity: 0.7;
+}
+
+.info-banner-close:hover {
+  opacity: 1;
+}
+
 .empty-state {
   padding: 48px 18px;
   text-align: center;
