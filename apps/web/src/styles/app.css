@@ -642,6 +642,9 @@ select {
 .prueba-resultado.is-error {
   color: var(--status-error);
 }
+.prueba-resultado.is-espera {
+  color: var(--ink-muted);
+}
 
 .freq-toggle {
   display: flex;

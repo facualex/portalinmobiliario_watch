@@ -181,6 +181,11 @@ export function PropertyModal({ chats, propiedad, onClose, onSaved }: Props) {
     evento.preventDefault();
     setError(null);
 
+    if (probandoUrl) {
+      setError("Espera a que termine la prueba de la URL antes de conectar.");
+      return;
+    }
+
     if (!nombre.trim() || !urlPoligono.trim()) {
       setError("Nombre y URL del polígono son obligatorios.");
       return;
@@ -352,6 +357,11 @@ export function PropertyModal({ chats, propiedad, onClose, onSaved }: Props) {
               >
                 {probandoUrl ? "Probando…" : "Probar URL"}
               </button>
+              {probandoUrl && !resultadoPrueba && (
+                <span className="prueba-resultado is-espera">
+                  Puede demorar hasta 1 minuto en confirmar el resultado.
+                </span>
+              )}
               {resultadoPrueba && (
                 <span
                   className={
@@ -478,7 +488,12 @@ export function PropertyModal({ chats, propiedad, onClose, onSaved }: Props) {
             >
               Cancelar
             </button>
-            <button type="submit" className="btn-primary" disabled={enviando}>
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={enviando || probandoUrl}
+              title={probandoUrl ? "Espera a que termine la prueba de la URL" : undefined}
+            >
               {enviando
                 ? "Guardando..."
                 : editando
