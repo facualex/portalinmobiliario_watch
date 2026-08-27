@@ -28,7 +28,7 @@ Todo el estado vive en una base **SQLite** compartida (`data/lindero.db`), sin i
 
 ### Requisitos
 
-- [Docker Desktop](https://docs.docker.com/get-docker/) instalado **y abierto**. Docker Desktop tiene que quedar corriendo en segundo plano (vas a ver su ícono, una ballena, en la barra de tareas o menu bar); si está cerrado, los comandos de más abajo van a fallar con un error como "Cannot connect to the Docker daemon".
+- [Docker Desktop](https://docs.docker.com/get-docker/) instalado **y abierto**. Docker Desktop tiene que quedar corriendo en segundo plano (vas a ver su ícono, una ballena, en la barra de tareas o menu bar); si está cerrado, los comandos de más abajo van a fallar con un error como "Cannot connect to the Docker daemon". Esto no es solo para instalar: Lindero necesita que Docker Desktop y sus contenedores sigan corriendo **todo el tiempo**, ya que ahí vive el proceso que revisa tus propiedades y manda los avisos. Si apagas el computador o cierras Docker Desktop, el monitoreo se detiene con él (más abajo hay una sección completa sobre esto).
 - Una cuenta de Telegram, para crear el bot y recibir los avisos.
 - Saber abrir la terminal de tu sistema (en Mac: la aplicación "Terminal"; en Windows: "PowerShell" o "Símbolo del sistema"). No hace falta experiencia previa: cada comando que tienes que escribir está indicado abajo, tal cual.
 
@@ -79,6 +79,19 @@ Todo el estado vive en una base **SQLite** compartida (`data/lindero.db`), sin i
    Para volver a levantarla más adelante, repite el paso 3 (`docker compose up -d --build`); no hace falta repetir el resto de los pasos, tus propiedades y configuración quedan guardadas.
 
 El estado (`data/lindero.db`) y los logs (`logs/`) se guardan en tu máquina vía volúmenes, así que persisten aunque reconstruyas o reinicies los contenedores.
+
+### ¿Qué pasa si el computador está apagado o Docker Desktop cerrado?
+
+Lindero solo puede revisar tus propiedades y avisarte mientras Docker Desktop y sus contenedores estén corriendo. Si el computador está apagado, dormido, o Docker Desktop está cerrado, el monitoreo simplemente no ocurre durante ese rato, ni te vas a enterar de cambios que hayan pasado mientras tanto.
+
+La buena noticia es que **no se pierde ninguna revisión pendiente para siempre**: los contenedores están configurados para reiniciarse solos apenas Docker vuelve a estar disponible (`restart: unless-stopped`). Entonces, apenas prendas el computador y Docker Desktop arranque de nuevo:
+
+- Si a alguna propiedad le tocaba revisarse mientras todo estaba apagado, Lindero la revisa **de inmediato**, ni bien el worker vuelve a estar corriendo (tarda como máximo 1 minuto en notarlo). No hace ese chequeo a la hora exacta que tenía programada originalmente, sino apenas puede.
+- Esa revisión atrasada se hace **una sola vez**, no una por cada hora u horario que se haya saltado mientras el computador estuvo apagado. Después de esa revisión, vuelve a su horario normal (por ejemplo, si revisa cada 24 horas, la siguiente será 24 horas después de ese chequeo de recuperación, no de la hora original).
+
+Para que esto funcione sin que tengas que acordarte de nada, te recomendamos dejar Docker Desktop configurado para **abrirse automáticamente al iniciar sesión** en tu computador (en Docker Desktop: `Settings` → `General` → activa la opción de inicio automático). Así, cada vez que prendas el computador, Docker y el monitoreo vuelven a arrancar solos.
+
+Una excepción importante: si antes de apagar el computador **detuviste la aplicación a mano** con `docker compose down` (paso 8 de arriba), los contenedores quedan apagados a propósito, y no se reinician solos aunque Docker Desktop se abra automáticamente. En ese caso, para retomar el monitoreo tienes que volver a ejecutar `docker compose up -d --build` (paso 3) desde la carpeta del proyecto.
 
 ### Obtener la URL del polígono de un edificio
 
