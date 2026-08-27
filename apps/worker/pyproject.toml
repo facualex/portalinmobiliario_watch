@@ -1,0 +1,20 @@
+[project]
+name = "worker"
+version = "0.1.0"
+description = "Scraper + programador interno de Lindero"
+requires-python = ">=3.12"
+dependencies = [
+    "lindero-core",
+    "python-dotenv==1.2.3",
+    "tzdata==2026.3",
+]
+
+[tool.uv.sources]
+lindero-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/worker"]

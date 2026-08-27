@@ -1,5 +1,5 @@
-lib/
-bin/
+/lib/
+/bin/
 pyvenv.cfg
 .env
 logs/
@@ -9,3 +9,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+node_modules/
+dist/
+*.tsbuildinfo
+.claude/
