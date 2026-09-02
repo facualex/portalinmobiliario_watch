@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Lindero: vigila propiedades en Portal Inmobiliario</title>
+<meta name="description" content="Watchdog self-hosted que vigila edificios puntuales en Portal Inmobiliario y avisa por Telegram apenas cambia la disponibilidad.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><path d=%22M4 9.5 L11 4.5 L20 7.5 L18.5 17 L9 20 L3 15Z%22 fill=%22%231d4ed8%22/></svg>">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Lindero: vigila propiedades en Portal Inmobiliario">
+<meta property="og:description" content="Watchdog self-hosted que vigila edificios puntuales en Portal Inmobiliario y avisa por Telegram apenas cambia la disponibilidad.">
+<meta property="og:image" content="https://facualex.github.io/portalinmobiliario_watch/img/showcase-app.png">
+<meta property="og:url" content="https://facualex.github.io/portalinmobiliario_watch/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Lindero: vigila propiedades en Portal Inmobiliario">
+<meta name="twitter:description" content="Watchdog self-hosted que vigila edificios puntuales en Portal Inmobiliario y avisa por Telegram apenas cambia la disponibilidad.">
+<meta name="twitter:image" content="https://facualex.github.io/portalinmobiliario_watch/img/showcase-app.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --ground: #e4e3d6;
+    --surface: #ffffff;
+    --surface-2: #f3f4f6;
+    --ink: #1f2937;
+    --ink-soft: #4b5563;
+    --ink-muted: #6b7280;
+    --line: #e5e7eb;
+    --line-strong: #d1d5db;
+    --accent: #1d4ed8;
+    --accent-strong: #1e40af;
+    --accent-ink: #ffffff;
+    --up: #047857;
+    --up-bg: #d1fae5;
+    --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.05);
+    --shadow-lift: 0 16px 44px rgba(23, 30, 48, 0.14);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #14161a;
+      --surface: #1a1d23;
+      --surface-2: #242830;
+      --ink: #f3f4f6;
+      --ink-soft: #c7cbd1;
+      --ink-muted: #9199a3;
+      --line: #2e333c;
+      --line-strong: #3a4049;
+      --accent: #3b82f6;
+      --accent-strong: #60a5fa;
+      --accent-ink: #ffffff;
+      --up: #34d399;
+      --up-bg: rgba(52, 211, 153, 0.16);
+      --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.28);
+      --shadow-lift: 0 20px 50px rgba(0, 0, 0, 0.45);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .mono {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  a { color: inherit; }
+
+  img { max-width: 100%; display: block; }
+
+  section {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+
+  /* ---------- Nav ---------- */
+
+  nav.top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 26px 24px 0;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: -0.01em;
+  }
+
+  nav.top .gh-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    color: var(--ink-soft);
+    padding: 7px 13px;
+    border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  nav.top .gh-link:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* ---------- Hero ---------- */
+
+  .hero {
+    padding-top: 76px;
+    padding-bottom: 56px;
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 48px;
+    align-items: center;
+  }
+
+  .hero h1 {
+    font-size: 44px;
+    line-height: 1.08;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin: 14px 0 18px;
+    text-wrap: balance;
+  }
+
+  .hero h1 .accent {
+    color: var(--accent);
+  }
+
+  .hero p.lead {
+    font-size: 16.5px;
+    color: var(--ink-soft);
+    max-width: 46ch;
+    margin: 0 0 28px;
+  }
+
+  .hero-ctas {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .btn-primary,
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    padding: 12px 20px;
+    border-radius: 10px;
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border: 1px solid var(--accent);
+  }
+  .btn-primary:hover {
+    background: var(--accent-strong);
+    border-color: var(--accent-strong);
+    transform: translateY(-1px);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line-strong);
+  }
+  .btn-ghost:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* ---------- Hero: notificación ilustrada ---------- */
+
+  .phone-mock {
+    position: relative;
+    justify-self: center;
+  }
+
+  .phone-mock .device {
+    width: 240px;
+    background: var(--surface);
+    border-radius: 30px;
+    box-shadow: var(--shadow-lift);
+    border: 1px solid var(--line);
+    padding: 14px;
+    transform: rotate(3deg);
+  }
+
+  .phone-mock .screen {
+    background: var(--surface-2);
+    border-radius: 18px;
+    padding: 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 260px;
+  }
+
+  .tg-bubble {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 10px 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+
+  .tg-bubble .tg-who {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 4px;
+    font-size: 11px;
+  }
+
+  .tg-bubble b {
+    color: var(--ink);
+  }
+
+  .phone-mock .badge {
+    position: absolute;
+    top: -14px;
+    right: 8px;
+    z-index: 2;
+    background: var(--up-bg);
+    color: var(--up);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    padding: 5px 11px;
+    border-radius: 999px;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* ---------- Cómo funciona ---------- */
+
+  .how {
+    padding: 40px 24px 64px;
+  }
+
+  .how-head {
+    max-width: 980px;
+    margin: 0 auto 30px;
+    padding: 0 24px;
+  }
+
+  .how-head h2 {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 8px 0 0;
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+
+  .step {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 22px 20px;
+    box-shadow: var(--shadow-card);
+  }
+
+  .step .num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+  }
+
+  .step h3 {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 6px;
+  }
+
+  .step p {
+    font-size: 13.5px;
+    color: var(--ink-muted);
+    margin: 0;
+  }
+
+  /* ---------- Screenshot ---------- */
+
+  .showcase {
+    padding: 8px 24px 72px;
+  }
+
+  .showcase-inner {
+    max-width: 980px;
+    margin: 0 auto;
+  }
+
+  .showcase-frame {
+    background: var(--surface);
+    border-radius: 16px;
+    box-shadow: var(--shadow-lift);
+    border: 1px solid var(--line);
+    overflow: hidden;
+  }
+
+  .showcase-frame .chrome {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .showcase-frame .chrome span {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--line-strong);
+  }
+
+  .showcase-frame img {
+    display: block;
+    width: 100%;
+  }
+
+  .showcase-caption {
+    text-align: center;
+    font-size: 13px;
+    color: var(--ink-muted);
+    margin-top: 16px;
+  }
+
+  /* ---------- Self-hosted ---------- */
+
+  .selfhosted {
+    padding: 8px 24px 72px;
+  }
+
+  .selfhosted-inner {
+    max-width: 980px;
+    margin: 0 auto;
+    background: var(--surface);
+    border-radius: 18px;
+    box-shadow: var(--shadow-card);
+    padding: 40px 44px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 36px;
+    align-items: center;
+  }
+
+  .selfhosted h2 {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 8px 0 12px;
+  }
+
+  .selfhosted p {
+    font-size: 14.5px;
+    color: var(--ink-soft);
+    margin: 0;
+    max-width: 44ch;
+  }
+
+  .facts {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .fact {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .fact .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--up);
+    margin-top: 7px;
+    flex-shrink: 0;
+  }
+
+  .fact strong {
+    display: block;
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+
+  .fact span {
+    font-size: 12.5px;
+    color: var(--ink-muted);
+  }
+
+  /* ---------- Quickstart ---------- */
+
+  .quickstart {
+    padding: 8px 24px 88px;
+  }
+
+  .quickstart-inner {
+    max-width: 720px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .quickstart h2 {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 8px 0 10px;
+  }
+
+  .quickstart > .quickstart-inner > p {
+    font-size: 14.5px;
+    color: var(--ink-muted);
+    margin: 0 0 24px;
+  }
+
+  .code-block {
+    background: var(--ink);
+    color: #e8eaed;
+    border-radius: 14px;
+    padding: 22px 24px;
+    text-align: left;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    line-height: 1.9;
+    box-shadow: var(--shadow-card);
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .code-block { background: #0d0f12; }
+  }
+
+  .code-block .comment { color: #8a9099; }
+  .code-block .cmd { color: #7dd3fc; }
+
+  .quickstart .readme-link {
+    display: inline-block;
+    margin-top: 20px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .quickstart .readme-link:hover { text-decoration: underline; }
+
+  /* ---------- Footer ---------- */
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 28px 24px 40px;
+  }
+
+  .footer-inner {
+    max-width: 980px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  footer .brand { font-size: 13.5px; }
+
+  footer .footer-links {
+    display: flex;
+    gap: 18px;
+    font-size: 13px;
+  }
+
+  footer a {
+    text-decoration: none;
+    color: var(--ink-muted);
+  }
+  footer a:hover { color: var(--accent); }
+
+  /* ---------- Responsive ---------- */
+
+  @media (max-width: 760px) {
+    .hero {
+      grid-template-columns: 1fr;
+      padding-top: 52px;
+      text-align: left;
+    }
+    .phone-mock { justify-self: start; }
+    .hero h1 { font-size: 32px; }
+    .steps { grid-template-columns: 1fr; }
+    .selfhosted-inner {
+      grid-template-columns: 1fr;
+      padding: 30px 24px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="brand">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <path d="M4 9.5 L11 4.5 L20 7.5 L18.5 17 L9 20 L3 15Z"
+            fill="rgba(29,78,216,0.12)" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round" />
+      <circle cx="4" cy="9.5" r="1.3" fill="var(--accent)" />
+      <circle cx="11" cy="4.5" r="1.3" fill="var(--accent)" />
+      <circle cx="20" cy="7.5" r="1.3" fill="var(--accent)" />
+      <circle cx="18.5" cy="17" r="1.3" fill="var(--accent)" />
+      <circle cx="9" cy="20" r="1.3" fill="var(--accent)" />
+      <circle cx="3" cy="15" r="1.3" fill="var(--accent)" />
+    </svg>
+    Lindero
+  </div>
+  <a class="gh-link" href="https://github.com/facualex/portalinmobiliario_watch" target="_blank" rel="noreferrer">
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38v-1.49c-2.22.48-2.69-1.07-2.69-1.07-.36-.92-.89-1.16-.89-1.16-.72-.5.06-.49.06-.49.8.06 1.22.82 1.22.82.71 1.22 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+    </svg>
+    GitHub
+  </a>
+</nav>
+
+<section class="hero">
+  <div>
+    <div class="eyebrow">Self-hosted · Telegram · Portal Inmobiliario</div>
+    <h1>La notificación<br>es el <span class="accent">producto</span>.</h1>
+    <p class="lead">
+      Dibuja un polígono sobre un edificio puntual en el mapa de Portal Inmobiliario.
+      Apenas cambia el número de unidades disponibles ahí, te llega un mensaje a
+      Telegram. Nada de revisar un dashboard a cada rato.
+    </p>
+    <div class="hero-ctas">
+      <a class="btn-primary" href="https://github.com/facualex/portalinmobiliario_watch" target="_blank" rel="noreferrer">
+        Ver en GitHub
+      </a>
+      <a class="btn-ghost" href="#instalar">Cómo instalarlo</a>
+    </div>
+  </div>
+
+  <div class="phone-mock">
+    <span class="badge">🔔 recién llegó</span>
+    <div class="device">
+      <div class="screen">
+        <div class="tg-bubble">
+          <div class="tg-who">✈ Bot Propiedades</div>
+          ✅ <b>Servicio de Monitoreo Activado</b><br><br>
+          Se ha iniciado el seguimiento para Antonio Varas 1234.<br><br>
+          Actualmente hay <b>2</b> disponibles.
+        </div>
+        <div class="tg-bubble">
+          <div class="tg-who">✈ Bot Propiedades</div>
+          🔔 <b>¡Cambio en Antonio Varas 1234!</b><br><br>
+          Unidades disponibles cambiaron de <b>2</b> a <b>1</b>.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="how">
+  <div class="how-head">
+    <div class="eyebrow">Cómo funciona</div>
+    <h2>Tres pasos, y después no vuelves a pensarlo.</h2>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="num mono">01</div>
+      <h3>Dibuja el polígono</h3>
+      <p>En el mapa de Portal Inmobiliario, ajustado alrededor del edificio que te interesa.</p>
+    </div>
+    <div class="step">
+      <div class="num mono">02</div>
+      <h3>Conéctalo a tu bot</h3>
+      <p>Pega la URL en Lindero, elige a qué chat de Telegram avisar y cada cuánto revisar.</p>
+    </div>
+    <div class="step">
+      <div class="num mono">03</div>
+      <h3>Recibe el aviso</h3>
+      <p>Solo cuando cambia algo real. El resto del tiempo, Lindero revisa por ti en silencio.</p>
+    </div>
+  </div>
+</section>
+
+<section class="showcase">
+  <div class="showcase-inner">
+    <div class="showcase-frame">
+      <div class="chrome">
+        <span></span><span></span><span></span>
+      </div>
+      <img src="img/showcase-app.png" alt="Panel de propiedades de Lindero, mostrando dos propiedades con su estado y próxima revisión" loading="lazy">
+    </div>
+    <p class="showcase-caption">El panel administrativo real: conectar, pausar, editar y ver el estado de cada propiedad.</p>
+  </div>
+</section>
+
+<section class="selfhosted">
+  <div class="selfhosted-inner">
+    <div>
+      <div class="eyebrow">Sin servidores de por medio</div>
+      <h2>Corre en tu propio equipo.</h2>
+      <p>Nada de crear una cuenta ni de que un tercero sepa qué propiedades vigilas.
+      Instalas Lindero una vez, con Docker, y es tuyo.</p>
+    </div>
+    <div class="facts">
+      <div class="fact">
+        <span class="dot"></span>
+        <div><strong>Gratis y de código abierto</strong><span>Todo el código está en GitHub, para revisar, modificar o auditar.</span></div>
+      </div>
+      <div class="fact">
+        <span class="dot"></span>
+        <div><strong>Tus datos, en tu máquina</strong><span>Todo vive en una base SQLite local. Nada sale de tu computador o servidor.</span></div>
+      </div>
+      <div class="fact">
+        <span class="dot"></span>
+        <div><strong>Sin límites artificiales</strong><span>Cuantas propiedades quieras, cada una con su propio horario.</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="quickstart" id="instalar">
+  <div class="quickstart-inner">
+    <div class="eyebrow">Instalación</div>
+    <h2>Arriba en tres comandos.</h2>
+    <p>Necesitas Docker Desktop instalado y abierto. El README trae la guía completa, paso a paso, pensada para cualquiera (no solo programadores).</p>
+    <div class="code-block"><span class="comment"># 1. clona el proyecto</span>
+<span class="cmd">git clone</span> https://github.com/facualex/portalinmobiliario_watch
+<span class="cmd">cd</span> portalinmobiliario_watch
+
+<span class="comment"># 2. completa TELEGRAM_BOT_TOKEN en .env</span>
+<span class="cmd">cp</span> .env.example .env
+
+<span class="comment"># 3. arriba</span>
+<span class="cmd">docker compose up</span> -d --build</div>
+    <a class="readme-link" href="https://github.com/facualex/portalinmobiliario_watch#instalación-con-docker-recomendado" target="_blank" rel="noreferrer">
+      Ver la guía completa en el README →
+    </a>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-inner">
+    <div class="brand">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+        <path d="M4 9.5 L11 4.5 L20 7.5 L18.5 17 L9 20 L3 15Z"
+              fill="rgba(29,78,216,0.12)" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round" />
+        <circle cx="4" cy="9.5" r="1.1" fill="var(--accent)" />
+        <circle cx="11" cy="4.5" r="1.1" fill="var(--accent)" />
+        <circle cx="20" cy="7.5" r="1.1" fill="var(--accent)" />
+        <circle cx="18.5" cy="17" r="1.1" fill="var(--accent)" />
+        <circle cx="9" cy="20" r="1.1" fill="var(--accent)" />
+        <circle cx="3" cy="15" r="1.1" fill="var(--accent)" />
+      </svg>
+      Lindero
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/facualex/portalinmobiliario_watch" target="_blank" rel="noreferrer">Repositorio</a>
+      <a href="https://github.com/facualex/portalinmobiliario_watch#readme" target="_blank" rel="noreferrer">Documentación</a>
+      <a href="https://github.com/facualex/portalinmobiliario_watch/issues" target="_blank" rel="noreferrer">Issues</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
